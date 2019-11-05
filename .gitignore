@@ -16,7 +16,6 @@
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
-[Rr]elease/
 [Rr]eleases/
 x64/
 x86/
@@ -338,3 +337,13 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+/Release/httpserv.tlog
+/Release/httpclient.tlog
+/Release/vc142.idb
+/Release/httpserv.vcxproj.FileListAbsolute.txt
+/Release/httpserv.lib
+/Release/httpserv.exp
+/Release/httpserv.dll.lastcodeanalysissucceeded
+/Release/httpclient.vcxproj.FileListAbsolute.txt
+/hsRelease/httpclient.tlog
+/hsRelease/httpclient.vcxproj.FileListAbsolute.txt

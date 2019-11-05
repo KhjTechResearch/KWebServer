@@ -1,15 +1,32 @@
+
+/*
+ *  Convert.hpp
+ *  Provides Simple Convertion Template between C++ types and tjs types
+ * ver: 2.00
+ * date: 22. April, 2010.
+ *
+ *  Copyright (C) 2018-2019 khjxiaogu
+ *
+ *  Author: khjxiaogu
+ *  Web: http://www.khjxiaog.com
+ *
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Affero General Public License for more details.
+ *
+ *
+*/
 #pragma once
 #include "server_https.hpp"
 
-// Added for the json-example
-//#define BOOST_SPIRIT_THREADSAFE
-//#include <boost/property_tree/json_parser.hpp>
-//#include <boost/property_tree/ptree.hpp>
 
-// Added for the default_resource example
-//#include "crypto.hpp"
-//#include <algorithm>
-//#include <boost/filesystem.hpp>
 #include <fstream>
 #include <vector>
 #include <ObjIdl.h>
@@ -257,7 +274,7 @@ public:
 
 	NativeObject(){
 	}
-	~NativeObject() {
+	virtual ~NativeObject() {
 		for (std::map<std::wstring, std::shared_ptr<iTJSDispatch2>>::iterator it = functions.begin(); it != functions.end(); it++) {
 			it->second->Release();
 		}
@@ -322,6 +339,7 @@ public:
 			}
 			else
 				return TJS_E_MEMBERNOTFOUND;
+		return TJS_E_MEMBERNOTFOUND;
 	}
 	void putFunc(const std::wstring str, NativeTJSFunction func) {
 		functions.insert(std::pair<std::wstring, std::shared_ptr<iTJSDispatch2>>(str, std::shared_ptr<iTJSDispatch2>(new FunctionCaller(func))));
@@ -372,6 +390,7 @@ public:
 			functions.erase(membername);
 			return TJS_S_OK;
 		}
+		return TJS_E_MEMBERNOTFOUND;
 	}
 	tjs_error TJS_INTF_METHOD
 		IsValid(

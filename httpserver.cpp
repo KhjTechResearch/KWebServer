@@ -1,12 +1,34 @@
-
+/*
+ *  httpserver.cpp
+ *  A simple hi-performance web server for TVP/krkr 2/z core for win32
+ * ver: 2.00
+ * date: 22. April, 2010.
+ *
+ *  Copyright (C) 2018-2019 khjxiaogu
+ *
+ *  Author: khjxiaogu
+ *  Web: http://www.khjxiaog.com
+ *
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Affero General Public License for more details.
+ *
+ *
+*/
 #include "Convert.hpp"
+#include <math.h>
 #include "IStreamStdWrapper.h"
 using namespace std;
-// Added for the json-example:
-//using namespace boost::property_tree;
+// 
 
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
-//using HttpsClient = SimpleWeb::Client<SimpleWeb::HTTPS>;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
 #define HTTPSERVCONFIGI(X) void set##X(int val) {\
 	server->config.##X = val;\
@@ -21,7 +43,12 @@ int get##X() {\
  ttstr get##X() {               \
     return ttstr(server->config.##X.c_str()); \
   }
-static mutex globalparsemutex;
+static mutex globalParseMutex;
+static mutex RefCountMutex;
+static int aliveConnCount;
+extern tjs_int TVPPluginGlobalRefCount;
+#define REGISTALIVECONN RefCountMutex.lock();aliveConnCount++;RefCountMutex.unlock()
+#define UNREGISTALIVECONN RefCountMutex.lock();aliveConnCount--;RefCountMutex.unlock()
 #define RequestEnvelop(X,N,T) RequestEnvelopDiffer(X,X,N,T)
 template <class Y>
 iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request> request) {
@@ -42,7 +69,7 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 }
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
  {\
-globalparsemutex.lock();\
+globalParseMutex.lock();\
 ttstr mn(N);\
 tTJSVariant *arg=new tTJSVariant[2];\
 auto itq= getRequestParam<T>(req);\
@@ -50,34 +77,40 @@ auto its =new  KResponse<T>(res);\
 arg[0] =itq;\
 arg[1] = its;\
 /*Y->FuncCall(NULL,NULL,NULL,NULL,2,&arg,X);*/\
-TVPPostEvent(X, Y,mn, NULL,NULL/*TVP_EPT_EXCLUSIVE*/, 2,arg);\
-/*its->Release();\
-itq->Release();*/\
+TVPPostEvent(X, Y,mn,rand(),NULL/*TVP_EPT_EXCLUSIVE*/, 2,arg);\
+its->Release();\
+itq->Release();\
 delete[] arg;\
-globalparsemutex.unlock();\
+globalParseMutex.unlock();\
  }
-template<typename T,int packetsize= 1024 * 512>
+template<typename T,int packetsize= 1024*128>
 class FileSender {
 public:
 	shared_ptr<typename T::Response> response;
-	shared_ptr < istream> ifs;
+	shared_ptr < ifstream> ifs;
 	const std::function<void(SimpleWeb::error_code)> callback;
 	char* buffer;
-	FileSender(shared_ptr<typename T::Response> response, shared_ptr <istream> ifs, const std::function<void(SimpleWeb::error_code)> callback)
+	FileSender(shared_ptr<typename T::Response> response, shared_ptr <ifstream> ifs, const std::function<void(SimpleWeb::error_code)> callback)
 		:response(response),ifs(ifs),callback(callback) {
 		//Allocate buffer
+		char x;
+		ifs->read(&x, 1);
+		ifs->seekg(0);
 		buffer = new char[packetsize];
+		REGISTALIVECONN;
 		
 	}
 	~FileSender() {
 		callback(SimpleWeb::error_code());
 		delete[] buffer;
+		UNREGISTALIVECONN;
 	}
 	void send() {
 		streamsize read_length;
-		if ((read_length = ifs->read(buffer, static_cast<streamsize>(packetsize)).gcount()) > 0) {
-			response->write(buffer, read_length);
-				response->send([=,this](const SimpleWeb::error_code& ec) {
+		try {
+			if ((read_length = ifs->read(buffer, static_cast<streamsize>(packetsize)).gcount()) > 0) {
+				response->write(buffer, read_length);
+				response->send([=, this](const SimpleWeb::error_code& ec) {
 					if (!ec)
 						if (read_length == packetsize) {
 							send();
@@ -86,19 +119,25 @@ public:
 							delete this;
 					else
 						callback(ec);
-				});
-
+					});
+			}
+		}
+		catch (...) {
+			send();
 		}
 	}
 };
+#define RELEASEIF 
 template <class Y>
 class KResponse : public NativeObject
 {
 	typedef SimpleWeb::Server<Y> T;
+	//boolean unreleased=true;
 public:
 	std::function<void(tTJSVariant*, tTJSVariant*)>func;
 	shared_ptr<typename T::Response> response;
 	KResponse(shared_ptr<typename T::Response> res) :response(res) {
+		REGISTALIVECONN;
 		putFunc(L"write", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
 			if (n < 1)
 				response->write();
@@ -118,6 +157,7 @@ public:
 					return TJS_E_INVALIDPARAM;
 			else
 				return TJS_E_BADPARAMCOUNT;
+			RELEASEIF
 			return TJS_S_OK;
 			});
 		putFunc(L"append", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
@@ -128,6 +168,7 @@ public:
 				*response << string((const char*)p[2]->AsOctetNoAddRef()->GetData(), p[2]->AsOctetNoAddRef()->GetLength());
 			else
 				return TJS_E_INVALIDPARAM;
+			RELEASEIF
 			return TJS_S_OK;
 			});
 		putFunc(L"appendFile", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
@@ -137,6 +178,7 @@ public:
 			auto ISW = new UnbufferedOLEStreamBuf(tvpstr);
 			istream ifs(ISW);
 			response->write(ifs);
+			RELEASEIF
 			return TJS_S_OK;
 			});
 		putFunc(L"send", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
@@ -150,6 +192,11 @@ public:
 				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				delete[] tv;
 				});
+			RELEASEIF
+			return TJS_S_OK;
+			});
+		putFunc(L"release", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
+			this->Release();
 			return TJS_S_OK;
 			});
 		putFunc(L"sendFile", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
@@ -158,11 +205,13 @@ public:
 			ttstr stor(*p[0]);
 			stor = TVPNormalizeStorageName(stor);
 			TVPGetLocalName(stor);
-			TVPAddLog(stor);
+			//TVPAddLog(stor);
 			ifstream* ifs = new ifstream();
 			ifs->open(stor.c_str(), ios::binary, _SH_DENYNO);
-			if (ifs->fail())
+			this->AddRef();
+			if (!ifs->good())
 				return TJS_E_INVALIDPARAM;
+
 			if (n == 2) {
 				response->write((SimpleWeb::StatusCode)p[1]->AsInteger());
 			}
@@ -170,29 +219,36 @@ public:
 				auto headers = TDictToCMap(p[2]->AsObjectNoAddRef());
 				ifs->seekg(0, ios::end);
 				headers.emplace(std::pair<std::string,std::string>("Content-Length", std::to_string(ifs->tellg())));
-				TVPAddLog(std::to_string(ifs->tellg()).c_str());
+			//	TVPAddLog(std::to_string(ifs->tellg()).c_str());
 				ifs->seekg(0,ios::beg);
 				response->write((SimpleWeb::StatusCode)p[1]->AsInteger(),headers);
 			}
-			FileSender<T>* fs=new FileSender<T>(response, shared_ptr <istream>(ifs), [&,this](SimpleWeb::error_code ec) {
+			FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
-				static ttstr evn(L"onSent");
-				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				try {
+					static ttstr evn(L"onSent");
+					TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				
+					this->Release();
+				}
+				catch (...) {}
 				delete[] tv;
-				this->Release();
 			//	ifs->close();
 				});
 			//thread thr([&] {
-				fs->send(); 
+					fs->send();
 			//});
+
 			//thr.detach();
+			RELEASEIF
+			return TJS_S_OK;
 			//fs.callback(SimpleWeb::error_code());
 			});
-		putFunc(L"sendFileEx", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
+		/*putFunc(L"sendFileEx", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
 			if (n < 1) return TJS_E_BADPARAMCOUNT;
 			ttstr stor(*p[0]);
 			IStream* tvpstr=TVPCreateIStream(stor, TJS_BS_READ);
@@ -219,8 +275,10 @@ public:
 				delete[] tv;
 				});
 			fs.send();
+			RELEASEIF
+				return TJS_S_OK;
 			//fs.callback(SimpleWeb::error_code());
-			});
+			});*/
 		putProp<int>(L"autoClose", [this]()->int{
 			return response->close_connection_after_response ? 1 : 0;
 			},
@@ -228,6 +286,9 @@ public:
 				response->close_connection_after_response = (val == 1);
 			});
 
+	}
+	virtual ~KResponse() {
+		UNREGISTALIVECONN;
 	}
 
 };
@@ -330,6 +391,10 @@ public:
 		self->server->stop();
 		return TJS_S_OK;
 	}
+	static tjs_error TJS_INTF_METHOD getAliveConnectionCount(tTJSVariant* r, tjs_int n, tTJSVariant** p, KServer* self) {
+		*r = tTJSVariant(aliveConnCount);
+		return TJS_S_OK;
+	}
 	static tjs_error TJS_INTF_METHOD startAsync(tTJSVariant* r, tjs_int n, tTJSVariant** p, KServer* self) {
 		if (!self) return TJS_E_NATIVECLASSCRASH;
 		thread server_thread([self]() {
@@ -377,38 +442,27 @@ tjs_error TJS_INTF_METHOD KServer<SimpleWeb::HTTP>::Factory(KServer** inst, tjs_
 	return TJS_S_OK;
 }
 #define NATIVEPROP(X) NCB_PROPERTY(X,get##X,set##X)
+#define REGISTALL(X) \
+NCB_REGISTER_CLASS(X) {\
+	CONSTRUCTOR;\
+	FUNCTION(setSpecificCallBack);\
+	FUNCTION(setDefaultCallBack);\
+	FUNCTION(start);\
+	FUNCTION(startAsync);\
+	FUNCTION(stop);\
+	NATIVEPROP(port);\
+	FUNCTION(getAliveConnectionCount);\
+	NATIVEPROP(thread_pool_size);\
+	NATIVEPROP(timeout_request);\
+	NATIVEPROP(timeout_content);\
+	NATIVEPROP(reuse_address);\
+	NATIVEPROP(fast_open);\
+	NATIVEPROP(address);\
+}
 using KHttpsServer = KServer<SimpleWeb::HTTPS>;
-NCB_REGISTER_CLASS(KHttpsServer) {
-	CONSTRUCTOR;
-	FUNCTION(setSpecificCallBack);
-	FUNCTION(setDefaultCallBack);
-	FUNCTION(start);
-	FUNCTION(startAsync);
-	FUNCTION(stop);
-	NATIVEPROP(port);
-	NATIVEPROP(thread_pool_size);
-	NATIVEPROP(timeout_request);
-	NATIVEPROP(timeout_content);
-	NATIVEPROP(reuse_address);
-	NATIVEPROP(fast_open);
-	NATIVEPROP(address);
-}
+REGISTALL(KHttpsServer)
 using KHttpServer = KServer<SimpleWeb::HTTP>;
-NCB_REGISTER_CLASS(KHttpServer) {
-	CONSTRUCTOR;
-	FUNCTION(setSpecificCallBack);
-	FUNCTION(setDefaultCallBack);
-	FUNCTION(start);
-	FUNCTION(startAsync);
-	FUNCTION(stop);
-	NATIVEPROP(port);
-	NATIVEPROP(thread_pool_size);
-	NATIVEPROP(timeout_request);
-	NATIVEPROP(timeout_content);
-	NATIVEPROP(reuse_address);
-	NATIVEPROP(fast_open);
-	NATIVEPROP(address);
-}
+REGISTALL(KHttpServer)
 #ifdef HAVE_MAIN_MET
 int main() {
   // HTTPS-server at port 8080 using 1 thread

@@ -81,6 +81,7 @@
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\OpenSSL-Win32\include;C:\boost\boost_1_62_0</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);C:\OpenSSL-Win32\lib\VC;$(WindowsSDK_LibraryPath_x86);$(NETFXKitsDir)Lib\um\x86;C:\boost\boost_1_62_0\lib32-msvc-14.0</LibraryPath>
     <OutDir>$(SolutionDir)hs$(Configuration)\</OutDir>
+    <IntDir>hs$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
