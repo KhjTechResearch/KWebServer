@@ -1,8 +1,6 @@
 /*
  *  httpserver.cpp
  *  A simple hi-performance web server for TVP/krkr 2/z core for win32
- * ver: 2.00
- * date: 22. April, 2010.
  *
  *  Copyright (C) 2018-2019 khjxiaogu
  *

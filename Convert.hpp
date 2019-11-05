@@ -2,8 +2,6 @@
 /*
  *  Convert.hpp
  *  Provides Simple Convertion Template between C++ types and tjs types
- * ver: 2.00
- * date: 22. April, 2010.
  *
  *  Copyright (C) 2018-2019 khjxiaogu
  *
