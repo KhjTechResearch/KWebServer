@@ -25,9 +25,9 @@
 #include "IStreamStdWrapper.h"
 using namespace std;
 // 
-
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
+//macros for definding setter and getters
 #define HTTPSERVCONFIGI(X) void set##X(int val) {\
 	server->config.##X = val;\
 	}\
@@ -41,13 +41,20 @@ int get##X() {\
  ttstr get##X() {               \
     return ttstr(server->config.##X.c_str()); \
   }
-static mutex globalParseMutex;
-static mutex RefCountMutex;
-static int aliveConnCount;
+
+static mutex globalParseMutex;//parsing mutex,avoid errors.
+static mutex RefCountMutex;//counting reference mutex,avoid threading problems
+static int aliveConnCount;//counts alive conections
 extern tjs_int TVPPluginGlobalRefCount;
+
+//count connection macros
 #define REGISTALIVECONN RefCountMutex.lock();aliveConnCount++;RefCountMutex.unlock()
 #define UNREGISTALIVECONN RefCountMutex.lock();aliveConnCount--;RefCountMutex.unlock()
+
+//define the call lambda
 #define RequestEnvelop(X,N,T) RequestEnvelopDiffer(X,X,N,T)
+
+//function to parse requests
 template <class Y>
 iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request> request) {
 	iTJSDispatch2* r = TJSCreateDictionaryObject();
@@ -60,11 +67,12 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 	s.assign(request->content.string());
 	//pprintf(L"method", CStrToTStr(request->method), r);
 	boost::asio::ip::tcp::endpoint ep = request->remote_endpoint();
-	pprintf(L"client", (CStrToTStr(ep.address().to_string()) + L":" + ttstr(ep.port())), r);
-	pprintf(L"contentString", new PropertyCaller<ttstr>([s] {return CStrToTStr(s); }, NULL), r);
+	pprintf(L"client", (CStrToTStr(ep.address().to_string()) + L":" + ttstr(ep.port())), r);//cpmbine ip string
+	pprintf(L"contentString", new PropertyCaller<ttstr>([s] {return CStrToTStr(s); }, NULL), r);//Convert only if used.
 	pprintf(L"contentData", new PropertyCaller<tTJSVariantOctet*>([s] { return new tTJSVariantOctet((unsigned char*)s.c_str(), s.size()); }, NULL), r);
 	return r;
 }
+//event call lambda macro
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
  {\
 globalParseMutex.lock();\
@@ -81,6 +89,7 @@ itq->Release();\
 delete[] arg;\
 globalParseMutex.unlock();\
  }
+//file sender,default 128k per packet.
 template<typename T,int packetsize= 1024*128>
 class FileSender {
 public:
@@ -92,7 +101,7 @@ public:
 		:response(response),ifs(ifs),callback(callback) {
 		//Allocate buffer
 		char x;
-		ifs->read(&x, 1);
+		ifs->read(&x, 1);//read a bit to know if it is valid
 		ifs->seekg(0);
 		buffer = new char[packetsize];
 		REGISTALIVECONN;
@@ -107,14 +116,14 @@ public:
 		streamsize read_length;
 		try {
 			if ((read_length = ifs->read(buffer, static_cast<streamsize>(packetsize)).gcount()) > 0) {
-				response->write(buffer, read_length);
+				response->write(buffer, read_length);//write and send
 				response->send([=, this](const SimpleWeb::error_code& ec) {
 					if (!ec)
 						if (read_length == packetsize) {
 							send();
 						}
 						else
-							delete this;
+							delete this;//if send complete
 					else
 						callback(ec);
 					});
@@ -138,19 +147,19 @@ public:
 		REGISTALIVECONN;
 		putFunc(L"write", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
 			if (n < 1)
-				response->write();
+				response->write();//default write with 200 and empty response
 			else if (n < 2)
-				response->write((SimpleWeb::StatusCode)p[0]->AsInteger());
+				response->write((SimpleWeb::StatusCode)p[0]->AsInteger());//only write status code
 			else if (n < 3)
 				if (p[0]->Type() == tvtVoid)
-					response->write(TDictToCMap(p[1]->AsObjectNoAddRef()));
+					response->write(TDictToCMap(p[1]->AsObjectNoAddRef()));//only write header with default 200
 				else
-					response->write((SimpleWeb::StatusCode)p[0]->AsInteger(), TDictToCMap(p[1]->AsObjectNoAddRef()));
+					response->write((SimpleWeb::StatusCode)p[0]->AsInteger(), TDictToCMap(p[1]->AsObjectNoAddRef()));//write header and status code
 			else if (n == 3)
 				if (p[2]->Type() == tvtString)
-					response->write((SimpleWeb::StatusCode)p[0]->AsInteger(), TStrToCStr(p[2]->AsStringNoAddRef()), TDictToCMap(p[1]->AsObjectNoAddRef()));
+					response->write((SimpleWeb::StatusCode)p[0]->AsInteger(), TStrToCStr(p[2]->AsStringNoAddRef()), TDictToCMap(p[1]->AsObjectNoAddRef()));//write headers and a string
 				else if (p[2]->Type() == tvtOctet)
-					response->write((SimpleWeb::StatusCode)p[0]->AsInteger(), string((const char*)p[2]->AsOctetNoAddRef()->GetData(), p[2]->AsOctetNoAddRef()->GetLength()), TDictToCMap(p[1]->AsObjectNoAddRef()));
+					response->write((SimpleWeb::StatusCode)p[0]->AsInteger(), string((const char*)p[2]->AsOctetNoAddRef()->GetData(), p[2]->AsOctetNoAddRef()->GetLength()), TDictToCMap(p[1]->AsObjectNoAddRef()));//write headers and an octet
 				else
 					return TJS_E_INVALIDPARAM;
 			else
@@ -172,14 +181,15 @@ public:
 		putFunc(L"appendFile", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
 			if (n < 1) return TJS_E_BADPARAMCOUNT;
 			ttstr stor(*p[0]);
-			IStream* tvpstr = TVPCreateIStream(stor, TJS_BS_READ);
-			auto ISW = new UnbufferedOLEStreamBuf(tvpstr);
-			istream ifs(ISW);
+			IStream* tvpstr = TVPCreateIStream(stor, TJS_BS_READ);//open TVP IStream
+			auto ISW = new UnbufferedOLEStreamBuf(tvpstr);//wrap it
+			istream ifs(ISW);//wrap it again
 			response->write(ifs);
 			RELEASEIF
 			return TJS_S_OK;
 			});
 		putFunc(L"send", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
+			//send with callback
 			response->send([this](SimpleWeb::error_code ec) {
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
@@ -202,25 +212,26 @@ public:
 
 			ttstr stor(*p[0]);
 			stor = TVPNormalizeStorageName(stor);
-			TVPGetLocalName(stor);
+			TVPGetLocalName(stor);//get local file name
 			//TVPAddLog(stor);
 			ifstream* ifs = new ifstream();
-			ifs->open(stor.c_str(), ios::binary, _SH_DENYNO);
+			ifs->open(stor.c_str(), ios::binary, _SH_DENYNO);//open file
 			this->AddRef();
 			if (!ifs->good())
 				return TJS_E_INVALIDPARAM;
 
 			if (n == 2) {
-				response->write((SimpleWeb::StatusCode)p[1]->AsInteger());
+				response->write((SimpleWeb::StatusCode)p[1]->AsInteger());//write if status code provided
 			}
 			else if (n == 3) {
 				auto headers = TDictToCMap(p[2]->AsObjectNoAddRef());
 				ifs->seekg(0, ios::end);
-				headers.emplace(std::pair<std::string,std::string>("Content-Length", std::to_string(ifs->tellg())));
+				headers.emplace(std::pair<std::string,std::string>("Content-Length", std::to_string(ifs->tellg())));//set to content length
 			//	TVPAddLog(std::to_string(ifs->tellg()).c_str());
 				ifs->seekg(0,ios::beg);
-				response->write((SimpleWeb::StatusCode)p[1]->AsInteger(),headers);
+				response->write((SimpleWeb::StatusCode)p[1]->AsInteger(),headers);//write headers if provided
 			}
+			//instance filesender with callback and stream
 			FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
