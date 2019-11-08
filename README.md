@@ -4,7 +4,7 @@
 A Simple and High performance Http and Https server plugin for [krkr2](https://github.com/krkrz/krkrz)/[krkrz](https://github.com/krkrz/krkrz)  
 用于krkr的简单高效的http和https服务端插件。  
 ![GitHub last commit](https://img.shields.io/github/last-commit/khjtechresearch/kwebserver)
-![Github](https://img.shields.io/github/downloads-pre/KhjTechResearch/KWebServer/latest/total)  
+![Github](https://img.shields.io/github/downloads/KhjTechResearch/KWebServer/latest/total)  
 Used headers from [SimpleWeb](https://github.com/eidheim/Simple-Web-Server) repository.  
 引用了来自[SimpleWeb](https://github.com/eidheim/Simple-Web-Server)的代码。  
 documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github.io/KWebServer/)  
