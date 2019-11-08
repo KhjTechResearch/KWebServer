@@ -8,7 +8,7 @@ A Simple and High performance Http and Https server plugin for [krkr2](https://g
 Used headers from [SimpleWeb](https://github.com/eidheim/Simple-Web-Server) repository.  
 引用了来自[SimpleWeb](https://github.com/eidheim/Simple-Web-Server)的代码。  
 documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github.io/KWebServer/)  
-使用文档：[KWebServer文档](https://khjtechresearch.github.io/KWebServer/)
+使用文档：[KWebServer文档](https://khjtechresearch.github.io/KWebServer/)  
 **(Chinese version only,English version comming soon.)**  
 **English and Japanese translations wanted, if you would like to do the translations,please open a pull request and upload translated documents with a suffix such as `_ja` or `_en`.**
 ### Building
@@ -16,8 +16,8 @@ documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github
   * You can use **Visual Studio 2019 IDE** or clone from console:
   `git clone https://github.com/KhjTechResearch/KWebServer`
 * Setup
-  * setup boost C++ library
-  * setup openSSL library
+  * setup [boost C++ library](https://www.boost.org/)
+  * setup [openSSL](https://github.com/openSSL/openSSL) library
   * add them into build path
 * Building
   * just set to Release Version and build it  
@@ -30,8 +30,8 @@ documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github
  * 你可以使用**Visual Studio 2019 IDE**导入此项目或者在控制台输入
  `git clone https://github.com/KhjTechResearch/KWebServer`
 * 准备工作
- * 准备boost C++库
- * 准备openSSL库
+ * 准备[boost C++库](https://www.boost.org/)
+ * 准备[openSSL](https://www.openSSL.org)库
  * 把他们添加到包含目录
 * 编译
  *设置为Release配置并生成
