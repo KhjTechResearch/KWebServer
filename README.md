@@ -25,9 +25,6 @@ documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github
 * Building
   * just set to Release Version and build it  
 **often, the latest build Version is inside the Release folder,Building is not necessary unless any change in code**  
-### Notice
-* This plugin has only tested in __Windows 10__ and __Windows server 2012 datacenter__ former versions may not be supported.  
-* This plugin may have some annoying errors,if you unluckily meet an error,please open an issue or pull request.
 ### 编译
 * 获得代码
  * 你可以使用**Visual Studio 2019 IDE**导入此项目或者在控制台输入
@@ -38,4 +35,11 @@ documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github
  * 把他们添加到包含目录
 * 编译
  *设置为Release配置并生成
- **一般来说，在Release文件夹的已经是最新版，无需再次编译**
+ **一般来说，在Release文件夹的已经是最新版，无需再次编译**  
+### Notice
+* This plugin has only tested in __Windows 10__ and __Windows server 2012 datacenter__ former versions may not be supported.  
+* This plugin may have some annoying errors,if you unluckily meet an error,please open an issue or pull request.
+### 注意
+* 本插件只在 __Windows 10__ 和 __Windows server 2012 datacenter__ 上测试过，更早的版本可能不受支持。  
+* 本插件可能有一些bug，如果你不幸的遇上了，请通过issue和pull request告诉作者
+
