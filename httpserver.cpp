@@ -46,7 +46,10 @@ static mutex globalParseMutex;//parsing mutex,avoid errors.
 static mutex RefCountMutex;//counting reference mutex,avoid threading problems
 static int aliveConnCount;//counts alive conections
 extern tjs_int TVPPluginGlobalRefCount;
-
+//define message
+#define WM_HTTP_REQUEST WM_USER|0x3533
+//define message
+#define WM_HTTPS_REQUEST WM_USER|0x3534
 //count connection macros
 #define REGISTALIVECONN RefCountMutex.lock();aliveConnCount++;RefCountMutex.unlock()
 #define UNREGISTALIVECONN RefCountMutex.lock();aliveConnCount--;RefCountMutex.unlock()
@@ -76,6 +79,7 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
  {\
 globalParseMutex.lock();\
+/*::PostMessage(msghwnd, WM_##T_REQUEST,0, (LPARAM)rr);*/\
 ttstr mn(N);\
 tTJSVariant *arg=new tTJSVariant[2];\
 auto itq= getRequestParam<T>(req);\
@@ -84,7 +88,7 @@ arg[0] =itq;\
 arg[1] = its;\
 /*Y->FuncCall(NULL,NULL,NULL,NULL,2,&arg,X);*/\
 TVPPostEvent(X, Y,mn,rand(),NULL/*TVP_EPT_EXCLUSIVE*/, 2,arg);\
-its->Release();\
+/*its->Release();*/\
 itq->Release();\
 delete[] arg;\
 globalParseMutex.unlock();\
@@ -301,43 +305,8 @@ public:
 	}
 
 };
-/*
-template <class Y>
-class KRequest : public NativeObject {
-	typedef SimpleWeb::Server<Y> T;
-	shared_ptr<typename T::Request> request;
-	ttstr met;
-	ttstr pat;
-	ttstr qry;
-	ttstr ver;
-	iTJSDispatch2 *headers;
-	std::string content;
-	boost::asio::ip::tcp::endpoint ep;
-	ttstr client;
-public:
-	KRequest(shared_ptr<typename T::Request> req) :request(req) {
-		met= CStrToTStr(request->method);
-		pat= CStrToTStr(request->path);
-		qry= CStrToTStr(request->query_string);
-		ver= CStrToTStr(request->http_version);
-		headers= CMapToTDict(request->header);
-		content = request->content.string();
-		ep = request->remote_endpoint();
-		client= CStrToTStr(ep.address().to_string()) + ep.port();
-		putProp<ttstr>(L"method", [this] {return met; });
-		putProp<ttstr>(L"path", [this] {return pat; });
-		putProp<ttstr>(L"query", [this] {return qry; });
-		putProp<ttstr>(L"version", [this] {return ver; });
-		putProp<iTJSDispatch2*>(L"headers", [this] {return headers; });
-		putProp<ttstr>(L"client", [this] { return client; });
-		putFunc(L"getQuery", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {*r = tTJSVariant(CMapToTDict(request->parse_query_string())); return TJS_S_OK; });
-		putProp<ttstr>(L"contentString", [this] {return CStrToTStr(content); });
-		putProp<tTJSVariantOctet*>(L"contentData", [this] { return new tTJSVariantOctet((unsigned char*)content.c_str(), content.size()); });
-	}
-	~KRequest() {
-		headers->Release();
-	}
-};*/
+
+
 template<class T>
 class KServer {
 	typedef SimpleWeb::Server<T> ST;
@@ -346,6 +315,38 @@ class KServer {
 	KServer();
 	iTJSDispatch2* objthis;
 public:
+	//added for multithreading
+#ifdef USE_WM
+	static ATOM WindowClass;
+	HWND createMessageWindow() {
+		HINSTANCE hinst = ::GetModuleHandle(NULL);
+		if (!WindowClass) {
+			//init a message receiver
+			WNDCLASSEXW wcex = {
+				/*size*/sizeof(WNDCLASSEX), /*style*/0, /*proc*/WndProc, /*extra*/0L,0L, /*hinst*/hinst,
+				/*icon*/NULL, /*cursor*/NULL, /*brush*/NULL, /*menu*/NULL,
+				/*class*/L"KHttpServer Msg wnd class", /*smicon*/NULL };
+			WindowClass = ::RegisterClassExW(&wcex);
+			if (!WindowClass)
+				TVPThrowExceptionMessage(TJS_W("register window class failed."));
+		}
+		HWND hwnd = ::CreateWindowExW(0, (LPCWSTR)MAKELONG(WindowClass, 0), TJS_W("KHttpServer Msg"),
+			0, 0, 0, 1, 1, HWND_MESSAGE, NULL, hinst, NULL);
+		if (!hwnd) TVPThrowExceptionMessage(TJS_W("create message window failed."));
+		::SetWindowLong(hwnd, GWL_USERDATA, (LONG)this);
+		return hwnd;
+	}
+	static LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+		if (msg == WM_HTTP_REQUEST) {
+			KServer* self = (KServer*)(::GetWindowLong(hwnd, GWL_USERDATA));
+			PwRequestResponse* rr = (PwRequestResponse*)lp;
+			if (self && rr) self->onRequest(rr);
+			if (rr) rr->done();
+			return 0;
+		}
+		return DefWindowProc(hwnd, msg, wp, lp);
+	}
+#endif
 	static tjs_error TJS_INTF_METHOD Factory(KServer** inst, tjs_int n, tTJSVariant** p, iTJSDispatch2* objthis);
 	HTTPSERVCONFIGI(port);
 	HTTPSERVCONFIGI(thread_pool_size);
@@ -416,7 +417,18 @@ public:
 };
 template<>
 KServer<SimpleWeb::HTTPS>::KServer(string crt, string key) {
-	server = new ST(crt, key);
+	try {
+		server = new ST(crt, key);
+	}
+	catch (boost::system::error_code e) {
+		TVPThrowExceptionMessage(CStrToTStr(e.message()).c_str());
+	}
+	catch (boost::system::system_error e) {
+		TVPThrowExceptionMessage(CStrToTStr(e.code().message()).c_str());
+	}
+	catch (...) {
+	
+	}
 	server->config.port = 443;
 	setDefaults();
 }
@@ -468,10 +480,13 @@ NCB_REGISTER_CLASS(X) {\
 	NATIVEPROP(fast_open);\
 	NATIVEPROP(address);\
 }
-using KHttpsServer = KServer<SimpleWeb::HTTPS>;
+using HTTP = SimpleWeb::HTTP;
+using HTTPS = SimpleWeb::HTTPS;
+using KHttpsServer = KServer<HTTPS>;
 REGISTALL(KHttpsServer)
-using KHttpServer = KServer<SimpleWeb::HTTP>;
+using KHttpServer = KServer<HTTP>;
 REGISTALL(KHttpServer)
+
 #ifdef HAVE_MAIN_MET
 int main() {
   // HTTPS-server at port 8080 using 1 thread

@@ -269,12 +269,17 @@ class NativeObject : public tTJSDispatch
 {
 public:
 	std::map<std::wstring,std::shared_ptr<iTJSDispatch2>> functions;
-
+	std::mutex concurrent;
 	NativeObject(){
 	}
 	virtual ~NativeObject() {
+		std::lock_guard<std::mutex> lock(concurrent);
 		for (std::map<std::wstring, std::shared_ptr<iTJSDispatch2>>::iterator it = functions.begin(); it != functions.end(); it++) {
-			it->second->Release();
+			try {
+				it->second->Release();
+			}
+			catch(...)
+			{}
 		}
 	}
 	virtual tjs_error TJS_INTF_METHOD FuncCall( // function invocation
@@ -286,12 +291,12 @@ public:
 		tTJSVariant** param,		// parameters
 		iTJSDispatch2* objthis		// object as "this"
 	) {
+		std::lock_guard<std::mutex> lock(concurrent);
 		if (!membername)return TJS_E_MEMBERNOTFOUND;
 		if (functions.find(membername) != functions.end())
 			return functions.at(membername)->FuncCall(flag, NULL, hint, result, numparams, param, objthis);
 		else
 			return TJS_E_MEMBERNOTFOUND;
-		
 	}
 	tjs_error TJS_INTF_METHOD PropGet(
 		tjs_uint32 flag,
@@ -301,6 +306,7 @@ public:
 		iTJSDispatch2* objthis
 	)
 	{
+		std::lock_guard<std::mutex> lock(concurrent);
 		if (!membername) {
 			*result = tTJSVariant(this);
 			return TJS_S_OK;
@@ -321,6 +327,7 @@ public:
 		iTJSDispatch2* objthis
 	)
 	{
+		std::lock_guard<std::mutex> lock(concurrent);
 		if (!membername) {
 			return TJS_E_MEMBERNOTFOUND;
 		}
@@ -337,17 +344,22 @@ public:
 			}
 			else
 				return TJS_E_MEMBERNOTFOUND;
+
 		return TJS_E_MEMBERNOTFOUND;
+
 	}
 	void putFunc(const std::wstring str, NativeTJSFunction func) {
+		std::lock_guard<std::mutex> lock(concurrent);
 		functions.insert(std::pair<std::wstring, std::shared_ptr<iTJSDispatch2>>(str, std::shared_ptr<iTJSDispatch2>(new FunctionCaller(func))));
 	}
 	template<typename  T> void putProp(const std::wstring str,typename PropertyCaller<T>::getterT getter=NULL, typename PropertyCaller<T>::setterT setter=NULL) {
+		std::lock_guard<std::mutex> lock(concurrent);
 		functions.insert(std::pair<std::wstring, std::shared_ptr<iTJSDispatch2>>(str, std::shared_ptr<iTJSDispatch2>(new PropertyCaller<T>(getter,setter))));
 	}
 	tjs_error TJS_INTF_METHOD
 		EnumMembers(tjs_uint32 flag, tTJSVariantClosure* callback, iTJSDispatch2* objthis)
 	{
+		std::lock_guard<std::mutex> lock(concurrent);
 		tTJSVariant* par = new tTJSVariant[3];
 		par[1] = NULL;
 		for (std::map<std::wstring, std::shared_ptr<iTJSDispatch2>>::iterator it = functions.begin(); it != functions.end(); it++) {
@@ -380,6 +392,7 @@ public:
 			iTJSDispatch2* objthis
 		)
 	{
+		std::lock_guard<std::mutex> lock(concurrent);
 		if (!membername) {
 			return TJS_E_MEMBERNOTFOUND;
 		}
@@ -398,6 +411,7 @@ public:
 			iTJSDispatch2* objthis
 		)
 	{
+		std::lock_guard<std::mutex> lock(concurrent);
 		if (!membername) {
 			return TJS_S_TRUE;
 		}

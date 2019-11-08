@@ -10,7 +10,7 @@
 #endif
 
 #include <algorithm>
-//#include <openssl/ssl.h>
+#include <openssl/ssl.h>
 
 namespace SimpleWeb {
   using HTTPS = asio::ssl::stream<asio::ip::tcp::socket>;
