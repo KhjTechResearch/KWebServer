@@ -1,7 +1,9 @@
 # KWebServer  
-![](https://img.shields.io/github/license/KhjTechResearch/KWebServer.svg?label=Stars)
-![](https://img.shields.io/github/license/KhjTechResearch/KWebServer.svg)
+![Github](https://img.shields.io/github/license/KhjTechResearch/KWebServer?label=Stars)
+![GitHub](https://img.shields.io/github/license/khjtechresearch/KWebServer)
 A Simple and High performance Http and Https server plugin for krkr2/krkrz  
+![GitHub last commit](https://img.shields.io/github/last-commit/khjtechresearch/kwebserver)
+![Github](https://img.shields.io/github/downloads-pre/KhjTechResearch/KWebServer/latest/total)
 Used headers from [SimpleWeb](https://github.com/eidheim/Simple-Web-Server) repository.  
 documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github.io/KWebServer/)
 ### Building
