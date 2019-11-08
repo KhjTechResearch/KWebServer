@@ -88,7 +88,7 @@ arg[0] =itq;\
 arg[1] = its;\
 /*Y->FuncCall(NULL,NULL,NULL,NULL,2,&arg,X);*/\
 TVPPostEvent(X, Y,mn,rand(),NULL/*TVP_EPT_EXCLUSIVE*/, 2,arg);\
-/*its->Release();*/\
+its->Release();\
 itq->Release();\
 delete[] arg;\
 globalParseMutex.unlock();\
