@@ -7,7 +7,7 @@ A Simple and High performance Http and Https server plugin for krkr2/krkrz
 Used headers from [SimpleWeb](https://github.com/eidheim/Simple-Web-Server) repository.  
 documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github.io/KWebServer/)
 **(Chinese version only,English version comming soon.)**  
-**Japanese translations wanted, if you would like to do the translations,please open a pull request and upload translated documentation with a `_ja` suffix.**
+**English and Japanese translations wanted, if you would like to do the translations,please open a pull request and upload translated documents with a suffix such as `_ja` or `_en`.**
 ### Building
 * Checkout project
   * You can use **Visual Studio 2019** or clone from console:
