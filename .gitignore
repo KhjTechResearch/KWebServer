@@ -9,6 +9,7 @@
 *.user
 *.userosscache
 *.sln.docstates
+*.psd
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -345,5 +346,7 @@ healthchecksdb
 /Release/httpserv.exp
 /Release/httpserv.dll.lastcodeanalysissucceeded
 /Release/httpclient.vcxproj.FileListAbsolute.txt
-/hsRelease/httpclient.tlog
-/hsRelease/httpclient.vcxproj.FileListAbsolute.txt
+/hsRelease/
+/httpclient.vcxproj
+/httpclient.vcxproj.filters
+/httpclient.cpp
