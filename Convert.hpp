@@ -22,7 +22,7 @@
  *
 */
 #pragma once
-#include "server_https.hpp"
+
 
 
 #include <fstream>
@@ -281,6 +281,7 @@ public:
 			catch(...)
 			{}
 		}
+		TVPAddLog("native obj released");
 	}
 	virtual tjs_error TJS_INTF_METHOD FuncCall( // function invocation
 		tjs_uint32 flag,			// calling flag
@@ -352,9 +353,12 @@ public:
 		std::lock_guard<std::mutex> lock(concurrent);
 		functions.insert(std::pair<std::wstring, std::shared_ptr<iTJSDispatch2>>(str, std::shared_ptr<iTJSDispatch2>(new FunctionCaller(func))));
 	}
-	template<typename  T> void putProp(const std::wstring str,typename PropertyCaller<T>::getterT getter=NULL, typename PropertyCaller<T>::setterT setter=NULL) {
+	template<typename  T> void putProp(const std::wstring str,
+		typename PropertyCaller<T>::getterT getter=NULL,
+		typename PropertyCaller<T>::setterT setter=NULL) {
 		std::lock_guard<std::mutex> lock(concurrent);
-		functions.insert(std::pair<std::wstring, std::shared_ptr<iTJSDispatch2>>(str, std::shared_ptr<iTJSDispatch2>(new PropertyCaller<T>(getter,setter))));
+		functions.insert(std::pair<std::wstring, std::shared_ptr<iTJSDispatch2>>(str,
+			std::shared_ptr<iTJSDispatch2>(new PropertyCaller<T>(getter,setter))));
 	}
 	tjs_error TJS_INTF_METHOD
 		EnumMembers(tjs_uint32 flag, tTJSVariantClosure* callback, iTJSDispatch2* objthis)
