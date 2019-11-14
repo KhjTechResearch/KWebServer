@@ -732,6 +732,7 @@ tjs_uint TJS_INTF_METHOD  tTJSDispatch::Release(void)
 
 		if(RefCount == 1) // really ready to destruct ?
 		{
+			RefCount = 0;
 			delete this;
 			return 0;
 		}
