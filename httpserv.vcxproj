@@ -142,11 +142,13 @@
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\OpenSSL-Win32\include;C:\boost\boost_1_62_0</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);C:\OpenSSL-Win32\lib\VC\static;$(WindowsSDK_LibraryPath_x86);$(NETFXKitsDir)Lib\um\x86;C:\boost\boost_1_62_0\lib32-msvc-14.0</LibraryPath>
     <TargetName>$(ProjectName)_WinEvent</TargetName>
+    <OutDir>$(SolutionDir)Release\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_TVPEvent|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\OpenSSL-Win32\include;C:\boost\boost_1_62_0</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);C:\OpenSSL-Win32\lib\VC\static;$(WindowsSDK_LibraryPath_x86);$(NETFXKitsDir)Lib\um\x86;C:\boost\boost_1_62_0\lib32-msvc-14.0</LibraryPath>
+    <OutDir>$(SolutionDir)Release\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
@@ -224,7 +226,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>BOOST_ASIO_ENABLE_CANCELIO;WIN32;BOOST_USE_WINDOWS_H;NDEBUG;HTTPSERV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>USE_TVP_EVENT;BOOST_ASIO_ENABLE_CANCELIO;WIN32;BOOST_USE_WINDOWS_H;NDEBUG;HTTPSERV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>

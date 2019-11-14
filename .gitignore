@@ -357,3 +357,5 @@ healthchecksdb
 /Release_WinEvent/httpserv_WinEvent.exp
 /Release_WinEvent/httpserv_WinEvent.lib
 /Release_WinEvent/vc142.idb
+/Release/httpserv_WinEvent.exp
+/Release/httpserv_WinEvent.lib
