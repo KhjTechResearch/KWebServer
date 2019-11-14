@@ -10,7 +10,7 @@
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
+ *  the Free Software Foundation; either version 3 of the License, or
  *  (at your option) any later version.
  *
  *  This program is distributed in the hope that it will be useful,
@@ -20,36 +20,39 @@
  *
  *
 */
+
+#include "server_https.hpp"
 #include "Convert.hpp"
 #include <math.h>
 #include "IStreamStdWrapper.h"
+#define USE_TVP_EVENT
 using namespace std;
-// 
+//alias define
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
-//macros for definding setter and getters
-#define HTTPSERVCONFIGI(X) void set##X(int val) {\
+//macro to define property of server config
+#define SC_PROPERTY_SETTER(T,X)\
+void set##X(T val) {\
 	server->config.##X = val;\
-	}\
-int get##X() {\
+}
+#define SC_PROPERTY_GETTER(T,X) \
+T get##X() {\
   return server->config.##X; \
-  }
-#define HTTPSERVCONFIGS(X)     \
-  void set##X(ttstr val) {       \
-    server->config.##X = TStrToCStr(val);  \
-  }                            \
- ttstr get##X() {               \
-    return ttstr(server->config.##X.c_str()); \
-  }
+}
+#define SC_PROPERTY_DEF(T,X) \
+SC_PROPERTY_SETTER(T,X)\
+SC_PROPERTY_GETTER(T,X)
+
+
+
 
 static mutex globalParseMutex;//parsing mutex,avoid errors.
 static mutex RefCountMutex;//counting reference mutex,avoid threading problems
 static int aliveConnCount;//counts alive conections
 extern tjs_int TVPPluginGlobalRefCount;
 //define message
-#define WM_HTTP_REQUEST WM_USER|0x3533
-//define message
-#define WM_HTTPS_REQUEST WM_USER|0x3534
+#define WM_ON_HTTP_REQUEST (WM_USER|0x3533)
+
 //count connection macros
 #define REGISTALIVECONN RefCountMutex.lock();aliveConnCount++;RefCountMutex.unlock()
 #define UNREGISTALIVECONN RefCountMutex.lock();aliveConnCount--;RefCountMutex.unlock()
@@ -61,6 +64,8 @@ extern tjs_int TVPPluginGlobalRefCount;
 template <class Y>
 iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request> request) {
 	iTJSDispatch2* r = TJSCreateDictionaryObject();
+	while(!r)
+		r = TJSCreateDictionaryObject();
 	pprintf(L"method", CStrToTStr(request->method), r);
 	pprintf(L"path", CStrToTStr(request->path), r);
 	pprintf(L"query", CMapToTDict(request->parse_query_string()), r);
@@ -75,24 +80,58 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 	pprintf(L"contentData", new PropertyCaller<tTJSVariantOctet*>([s] { return new tTJSVariantOctet((unsigned char*)s.c_str(), s.size()); }, NULL), r);
 	return r;
 }
+class MainEvent {
+	tTJSVariant** vars;
+	int argc;
+	const wchar_t* member;
+	tTJSVariantClosure cls;
+public:
+	MainEvent(tTJSVariantClosure cls,int argc, tTJSVariant** vars,const wchar_t* members) :cls(cls),argc(argc),vars(vars),member(members){
+	};
+	void Invoke() {
+		//tTJSVariant result;
+		//tTJSVariantClosure caller(otarg,othis);
+			cls.FuncCall(NULL, member, NULL,NULL, argc, vars,NULL);
+	}
+	~MainEvent() {
+		for(int i=0;i<argc;i++)
+			delete *(vars+i);
+	}
+};
+ofstream *os;
 //event call lambda macro
+#ifdef USE_TVP_EVENT
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
  {\
-globalParseMutex.lock();\
-/*::PostMessage(msghwnd, WM_##T_REQUEST,0, (LPARAM)rr);*/\
+std::lock_guard<mutex> mtx(globalParseMutex);\
 ttstr mn(N);\
 tTJSVariant *arg=new tTJSVariant[2];\
 auto itq= getRequestParam<T>(req);\
 auto its =new  KResponse<T>(res);\
-arg[0] =itq;\
-arg[1] = its;\
+arg[0] = tTJSVariant(itq,itq); \
+arg[1] = its; \
 /*Y->FuncCall(NULL,NULL,NULL,NULL,2,&arg,X);*/\
-TVPPostEvent(X, Y,mn,rand(),NULL/*TVP_EPT_EXCLUSIVE*/, 2,arg);\
+TVPPostEvent(X, Y,mn,rand(),/*NULL*/TVP_EPT_EXCLUSIVE, 2,arg);\
 its->Release();\
 itq->Release();\
 delete[] arg;\
-globalParseMutex.unlock();\
- }
+}
+#else  
+#define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
+ {\
+std::lock_guard<mutex> mtx(globalParseMutex);\
+tTJSVariant* arg[2]; \
+auto itq = getRequestParam<T>(req); \
+auto its = new  KResponse<T>(res);\
+itq->AddRef();\
+arg[0] =new tTJSVariant(itq,itq); \
+arg[1] =new tTJSVariant(its); \
+PostMessageW(hwnd, WM_HTTP_REQUEST,NULL,(LPARAM)new MainEvent(X,2,arg,N) );\
+its->Release();\
+/*itq->Release();*/\
+}
+#endif
+
 //file sender,default 128k per packet.
 template<typename T,int packetsize= 1024*128>
 class FileSender {
@@ -112,6 +151,7 @@ public:
 		
 	}
 	~FileSender() {
+		ifs->close();
 		callback(SimpleWeb::error_code());
 		delete[] buffer;
 		UNREGISTALIVECONN;
@@ -193,8 +233,11 @@ public:
 			return TJS_S_OK;
 			});
 		putFunc(L"send", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
+
 			//send with callback
 			response->send([this](SimpleWeb::error_code ec) {
+#ifdef USE_TVP_EVENT
+				std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
@@ -203,6 +246,7 @@ public:
 				static ttstr evn(L"onSent");
 				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				delete[] tv;
+#endif
 				});
 			RELEASEIF
 			return TJS_S_OK;
@@ -219,7 +263,8 @@ public:
 			TVPGetLocalName(stor);//get local file name
 			//TVPAddLog(stor);
 			ifstream* ifs = new ifstream();
-			ifs->open(stor.c_str(), ios::binary, _SH_DENYNO);//open file
+			while(!ifs->is_open())
+				ifs->open(stor.c_str(), ios::binary,_SH_DENYWR);//open file
 			this->AddRef();
 			if (!ifs->good())
 				return TJS_E_INVALIDPARAM;
@@ -237,6 +282,8 @@ public:
 			}
 			//instance filesender with callback and stream
 			FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
+#ifdef USE_TVP_EVENT
+				std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
@@ -247,9 +294,11 @@ public:
 					TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				
 					this->Release();
+
 				}
 				catch (...) {}
 				delete[] tv;
+#endif
 			//	ifs->close();
 				});
 			//thread thr([&] {
@@ -306,22 +355,25 @@ public:
 
 };
 
-
+static ATOM WindowClass;
 template<class T>
 class KServer {
 	typedef SimpleWeb::Server<T> ST;
 	ST* server;
+	//Constructors are differ in different protocol
 	KServer(string crt, string key);
 	KServer();
 	iTJSDispatch2* objthis;
+	
 public:
-	//added for multithreading
-#ifdef USE_WM
-	static ATOM WindowClass;
+	//if not using TVPPostEvent,use Windows message(experimental)
+#ifndef USE_TVP_EVENT
+	
+	HWND hwnd;
 	HWND createMessageWindow() {
 		HINSTANCE hinst = ::GetModuleHandle(NULL);
 		if (!WindowClass) {
-			//init a message receiver
+			//make a window class
 			WNDCLASSEXW wcex = {
 				/*size*/sizeof(WNDCLASSEX), /*style*/0, /*proc*/WndProc, /*extra*/0L,0L, /*hinst*/hinst,
 				/*icon*/NULL, /*cursor*/NULL, /*brush*/NULL, /*menu*/NULL,
@@ -330,37 +382,60 @@ public:
 			if (!WindowClass)
 				TVPThrowExceptionMessage(TJS_W("register window class failed."));
 		}
-		HWND hwnd = ::CreateWindowExW(0, (LPCWSTR)MAKELONG(WindowClass, 0), TJS_W("KHttpServer Msg"),
+		//create a window for this instance to receive messahes
+		hwnd = ::CreateWindowExW(0, (LPCWSTR)MAKELONG(WindowClass, 0), (ttstr(TJS_W("KHttpServer Msg"))+rand()).c_str(),
 			0, 0, 0, 1, 1, HWND_MESSAGE, NULL, hinst, NULL);
 		if (!hwnd) TVPThrowExceptionMessage(TJS_W("create message window failed."));
+		//bind window with this FOR FUTURE USE.
 		::SetWindowLong(hwnd, GWL_USERDATA, (LONG)this);
 		return hwnd;
 	}
 	static LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-		if (msg == WM_HTTP_REQUEST) {
-			KServer* self = (KServer*)(::GetWindowLong(hwnd, GWL_USERDATA));
-			PwRequestResponse* rr = (PwRequestResponse*)lp;
-			if (self && rr) self->onRequest(rr);
-			if (rr) rr->done();
+		if (msg == WM_ON_HTTP_REQUEST) {
+			//prevent all exceptions
+			__try {
+				((MainEvent*)lp)->Invoke();
+			}
+			__except (1) {
+			
+			}
+			__try {
+				delete ((MainEvent*)lp);
+			}
+			__except (1) {}
 			return 0;
 		}
 		return DefWindowProc(hwnd, msg, wp, lp);
 	}
 #endif
+	//this method should be implemented seperately in different protocol
 	static tjs_error TJS_INTF_METHOD Factory(KServer** inst, tjs_int n, tTJSVariant** p, iTJSDispatch2* objthis);
-	HTTPSERVCONFIGI(port);
-	HTTPSERVCONFIGI(thread_pool_size);
-	HTTPSERVCONFIGI(timeout_request);
-	HTTPSERVCONFIGI(timeout_content);
-	HTTPSERVCONFIGI(reuse_address);
-	HTTPSERVCONFIGI(fast_open);
-	HTTPSERVCONFIGS(address);
+	//define server properties needed to set
+	SC_PROPERTY_DEF(short,port)
+	SC_PROPERTY_DEF(int,thread_pool_size)
+	SC_PROPERTY_DEF(int,timeout_request);
+	SC_PROPERTY_DEF(int,timeout_content);
+	SC_PROPERTY_DEF(int,reuse_address);
+	SC_PROPERTY_DEF(int,fast_open);
+	void setaddress(ttstr ip) {
+		server->config.address = TStrToCStr(ip);
+	}
+	ttstr getaddress() {
+		 return CStrToTStr(server->config.address);
+	}
+
+	//initialize instance after being constructed
+	//since different protocol uses different ctors
 	void setDefaults() {
 		server->config.address = "0.0.0.0";
 		server->config.thread_pool_size = 2;
 		//server->config.timeout_content = 5000;
+#ifndef USE_TVP_EVENT
+		createMessageWindow();
+#endif
 		server->default_callback = RequestEnvelop(objthis, L"onRequest", T);
 		/*server->on_error = [this](shared_ptr<ST::Request> request,const SimpleWeb::error_code& ec) {
+			std::lock_guard<mutex> mtx(globalParseMutex);
 			ttstr erc(L"onError");
 			tTJSVariant* tv =new tTJSVariant[3];
 			tv[0] = getRequestParam<T>(request);
@@ -375,20 +450,38 @@ public:
 	static tjs_error TJS_INTF_METHOD setSpecificCallBack(tTJSVariant* r, tjs_int n, tTJSVariant** p, KServer* self) {
 		if (!self) return TJS_E_NATIVECLASSCRASH;
 		if (n < 3) return TJS_E_BADPARAMCOUNT;
+#ifdef USE_TVP_EVENT
 		iTJSDispatch2* objcxt = TJSCreateDictionaryObject();
 		objcxt->PropSet(TJS_MEMBERENSURE, L"onEvent", NULL, p[2], objcxt);
 		if (p[1]->Type() == tvtString)
 			self->server->resource[TStrToCStr(p[1]->AsStringNoAddRef())][TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, "onEvent", T);
 		else
 			self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, "onEvent", T);
+#else
+		HWND hwnd = self->hwnd;
+		if (p[1]->Type() == tvtString) {
+			auto objcxt = p[2]->AsObjectClosure();
+			self->server->resource[TStrToCStr(p[1]->AsStringNoAddRef())][TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
+		}
+		else {
+			auto objcxt = p[2]->AsObjectClosure();
+			self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
+		}
+#endif
 		return TJS_S_OK;
 	}
 	static tjs_error TJS_INTF_METHOD setDefaultCallBack(tTJSVariant* r, tjs_int n, tTJSVariant** p, KServer* self) {
 		if (!self) return TJS_E_NATIVECLASSCRASH;
 		if (n < 2) return TJS_E_BADPARAMCOUNT;
+#ifdef USE_TVP_EVENT
 		iTJSDispatch2* objcxt = TJSCreateDictionaryObject();
 		objcxt->PropSet(TJS_MEMBERENSURE,L"onEvent",NULL, p[1], objcxt);
 		self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt,"onEvent", T);
+#else
+		HWND hwnd = self->hwnd;
+		auto objcxt = p[1]->AsObjectClosure();
+		self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
+#endif
 		return TJS_S_OK;
 	}
 	static tjs_error TJS_INTF_METHOD start(tTJSVariant* r, tjs_int n, tTJSVariant** p, KServer* self) {
@@ -486,229 +579,13 @@ using KHttpsServer = KServer<HTTPS>;
 REGISTALL(KHttpsServer)
 using KHttpServer = KServer<HTTP>;
 REGISTALL(KHttpServer)
-
-#ifdef HAVE_MAIN_MET
-int main() {
-  // HTTPS-server at port 8080 using 1 thread
-  // Unless you do more heavy non-threaded processing in the resources,
-  // 1 thread is usually faster than several threads
-  HttpsServer server("server.crt", "server.key");
-  server.config.port = 433;
-  server.config.address = "0.0.0.0";
-  server.config.thread_pool_size = 2;
-
-  // Add resources using path-regex and method-string, and an anonymous function
-  // POST-example for the path /string, responds the posted string
-  server.resource["^/string$"]["POST"] = [](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request){
-    // Retrieve string:
-    auto content = request->content.string();
-    // request->content.string() is a convenience function for:
-    // stringstream ss;
-    // ss << request->content.rdbuf();
-    // auto content=ss.str();
-
-    *response << "HTTP/1.1 200 OK\r\nContent-Length: " << content.length() << "\r\n\r\n"
-              << content;
-	
-    // Alternatively, use one of the convenience functions, for instance:
-    // response->write(content);
-  };
-
-  // POST-example for the path /json, responds firstName+" "+lastName from the posted json
-  // Responds with an appropriate error message if the posted json is not valid, or if firstName or lastName is missing
-  // Example posted json:
-  // {
-  //   "firstName": "John",
-  //   "lastName": "Smith",
-  //   "age": 25
-  // }
-  server.resource["^/json$"]["POST"] = [](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
-    try {
-      ptree pt;
-      read_json(request->content, pt);
-
-      auto name = pt.get<string>("firstName") + " " + pt.get<string>("lastName");
-
-      *response << "HTTP/1.1 200 OK\r\n"
-                << "Content-Length: " << name.length() << "\r\n\r\n"
-                << name;
-    }
-    catch(const exception &e) {
-      *response << "HTTP/1.1 400 Bad Request\r\nContent-Length: " << strlen(e.what()) << "\r\n\r\n"
-                << e.what();
-    }
-
-
-    // Alternatively, using a convenience function:
-    // try {
-    //     ptree pt;
-    //     read_json(request->content, pt);
-
-    //     auto name=pt.get<string>("firstName")+" "+pt.get<string>("lastName");
-    //     response->write(name);
-    // }
-    // catch(const exception &e) {
-    //     response->write(SimpleWeb::StatusCode::client_error_bad_request, e.what());
-    // }
-  };
-
-  // GET-example for the path /info
-  // Responds with request-information
-  server.resource["^/info$"]["GET"] = [](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
-    stringstream stream;
-    stream << "<h1>Request from " << request->remote_endpoint().address().to_string() << ":" << request->remote_endpoint().port() << "</h1>";
-
-    stream << request->method << " " << request->path << " HTTP/" << request->http_version;
-
-    stream << "<h2>Query Fields</h2>";
-    auto query_fields = request->parse_query_string();
-    for(auto &field : query_fields)
-      stream << field.first << ": " << field.second << "<br>";
-
-    stream << "<h2>Header Fields</h2>";
-    for(auto &field : request->header)
-      stream << field.first << ": " << field.second << "<br>";
-
-    response->write(stream);
-  };
-
-  // GET-example for the path /match/[number], responds with the matched string in path (number)
-  // For instance a request GET /match/123 will receive: 123
-  server.resource["^/match/([0-9]+)$"]["GET"] = [](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
-    response->write(request->path_match[1].str());
-  };
-
-  // GET-example simulating heavy work in a separate thread
-  server.resource["^/work$"]["GET"] = [](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> /*request*/) {
-    thread work_thread([response] {
-      this_thread::sleep_for(chrono::seconds(5));
-      response->write("Work done");
-    });
-    work_thread.detach();
-  };
-
-  // Default GET-example. If no other matches, this anonymous function will be called.
-  // Will respond with content in the web/-directory, and its subdirectories.
-  // Default file: index.html
-  // Can for instance be used to retrieve an HTML 5 client that uses REST-resources on this server
-  server.default_resource["GET"] = [](shared_ptr<HttpsServer::Response> response, shared_ptr<HttpsServer::Request> request) {
-    try {
-      auto web_root_path = boost::filesystem::canonical("web");
-      auto path = boost::filesystem::canonical(web_root_path / request->path);
-      // Check if path is within web_root_path
-      if(distance(web_root_path.begin(), web_root_path.end()) > distance(path.begin(), path.end()) ||
-         !equal(web_root_path.begin(), web_root_path.end(), path.begin()))
-        throw invalid_argument("path must be within root path");
-      if(boost::filesystem::is_directory(path))
-        path /= "index.html";
-
-      SimpleWeb::CaseInsensitiveMultimap header;
-
-      // Uncomment the following line to enable Cache-Control
-      // header.emplace("Cache-Control", "max-age=86400");
-
-#ifdef HAVE_OPENSSL
-//    Uncomment the following lines to enable ETag
-//    {
-//      ifstream ifs(path.string(), ifstream::in | ios::binary);
-//      if(ifs) {
-//        auto hash = SimpleWeb::Crypto::to_hex_string(SimpleWeb::Crypto::md5(ifs));
-//        header.emplace("ETag", "\"" + hash + "\"");
-//        auto it = request->header.find("If-None-Match");
-//        if(it != request->header.end()) {
-//          if(!it->second.empty() && it->second.compare(1, hash.size(), hash) == 0) {
-//            response->write(SimpleWeb::StatusCode::redirection_not_modified, header);
-//            return;
-//          }
-//        }
-//      }
-//      else
-//        throw invalid_argument("could not read file");
-//    }
-#endif
-
-      auto ifs = make_shared<ifstream>();
-      ifs->open(path.string(), ifstream::in | ios::binary | ios::ate);
-
-      if(*ifs) {
-        auto length = ifs->tellg();
-        ifs->seekg(0, ios::beg);
-
-        header.emplace("Content-Length", to_string(length));
-        response->write(header);
-
-        // Trick to define a recursive function within this scope (for example purposes)
-        class FileServer {
-        public:
-          static void read_and_send(const shared_ptr<HttpsServer::Response> &response, const shared_ptr<ifstream> &ifs) {
-            // Read and send 128 KB at a time
-            static vector<char> buffer(131072); // Safe when server is running on one thread
-            streamsize read_length;
-            if((read_length = ifs->read(&buffer[0], static_cast<streamsize>(buffer.size())).gcount()) > 0) {
-              response->write(&buffer[0], read_length);
-              if(read_length == static_cast<streamsize>(buffer.size())) {
-                response->send([response, ifs](const SimpleWeb::error_code &ec) {
-                  if(!ec)
-                    read_and_send(response, ifs);
-                  else
-                    cerr << "Connection interrupted" << endl;
-                });
-              }
-            }
-          }
-        };
-        FileServer::read_and_send(response, ifs);
-      }
-      else
-        throw invalid_argument("could not read file");
-    }
-    catch(const exception &e) {
-      response->write(SimpleWeb::StatusCode::client_error_bad_request, "Could not open path " + request->path + ": " + e.what());
-    }
-  };
-
-  server.on_error = [](shared_ptr<HttpsServer::Request> /*request*/, const SimpleWeb::error_code & /*ec*/) {
-    // Handle errors here
-    // Note that connection timeouts will also call this handle with ec set to SimpleWeb::errc::operation_canceled
-  };
-
-  thread server_thread([&server]() {
-    // Start server4
-    server.start();
-  });
-
-  // Wait for server to start so that the client can connect
-  this_thread::sleep_for(chrono::seconds(1));
-
-  // Client examples
-  // Second create() parameter set to false: no certificate verification
-  HttpsClient client("localhost:8080", false);
-
-  string json_string = "{\"firstName\": \"John\",\"lastName\": \"Smith\",\"age\": 25}";
-
-  // Synchronous request examples
-  try {
-    cout << "Example GET request to https://localhost:8080/match/123" << endl;
-    auto r1 = client.request("GET", "/match/123");
-    cout << "Response content: " << r1->content.rdbuf() << endl << endl; // Alternatively, use the convenience function r1->content.string()
-
-    cout << "Example POST request to https://localhost:8080/string" << endl;
-    auto r2 = client.request("POST", "/string", json_string);
-    cout << "Response content: " << r2->content.rdbuf() << endl << endl;
-  }
-  catch(const SimpleWeb::system_error &e) {
-    cerr << "Client request error: " << e.what() << endl;
-  }
-
-  // Asynchronous request example
-  cout << "Example POST request to https://localhost:8080/json" << endl;
-  client.request("POST", "/json", json_string, [](shared_ptr<HttpsClient::Response> response, const SimpleWeb::error_code &ec) {
-    if(!ec)
-      cout << "Response content: " << response->content.rdbuf() << endl;
-  });
-  client.io_service->run();
-
-  server_thread.join();
+void cof() {
+	os = new ofstream();
+	os->open(L"httpserv.log", ios::out, _SH_DENYWR);
 }
-
-#endif
+NCB_PRE_REGIST_CALLBACK(cof);
+void eof() {
+	os->close();
+	
+}
+NCB_POST_UNREGIST_CALLBACK(eof);
