@@ -226,7 +226,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>USE_TVP_EVENT;BOOST_ASIO_ENABLE_CANCELIO;WIN32;BOOST_USE_WINDOWS_H;NDEBUG;HTTPSERV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>BOOST_ASIO_ENABLE_CANCELIO;WIN32;BOOST_USE_WINDOWS_H;NDEBUG;HTTPSERV_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
@@ -337,6 +337,7 @@
     <ClInclude Include="CPConv.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="IStreamStdWrapper.h" />
+    <ClInclude Include="KRunnable.h" />
     <ClInclude Include="NativeObject.hpp" />
     <ClInclude Include="ncbind.hpp" />
     <ClInclude Include="ncb_invoke.hpp" />
@@ -352,6 +353,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="httpserver.cpp" />
     <ClCompile Include="IStreamStdWrapper.cpp" />
+    <ClCompile Include="KRunnable.cpp" />
     <ClCompile Include="ncbind.cpp" />
     <ClCompile Include="tp_stub.cpp" />
   </ItemGroup>

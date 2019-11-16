@@ -25,6 +25,7 @@
 #include "Convert.hpp"
 #include <math.h>
 #include "IStreamStdWrapper.h"
+#include "KRunnable.h"
 using namespace std;
 //alias define
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
@@ -49,71 +50,6 @@ static mutex globalParseMutex;//parsing mutex,avoid errors.
 static mutex RefCountMutex;//counting reference mutex,avoid threading problems
 static int aliveConnCount;//counts alive conections
 extern tjs_int TVPPluginGlobalRefCount;
-
-//if not using TVPPostEvent,use Windows message(experimental)
-#ifndef USE_TVP_EVENT
-//main thread call event wrapper
-class MainEvent {
-	tTJSVariant** vars;
-	int argc;
-	const wchar_t* member;
-	tTJSVariantClosure cls;
-public:
-	MainEvent(tTJSVariantClosure cls, int argc, tTJSVariant** vars, const wchar_t* members) :cls(cls), argc(argc), vars(vars), member(members) {
-	};
-	void Invoke() {
-		//tTJSVariant result;
-		//tTJSVariantClosure caller(otarg,othis);
-		cls.FuncCall(NULL, member, NULL, NULL, argc, vars, NULL);
-	}
-	~MainEvent() {
-		for (int i = 0; i < argc; i++)
-			delete* (vars + i);
-	}
-};
-//define message
-#define WM_ON_HTTP_REQUEST (WM_USER|0x3533)
-static ATOM WindowClass;
-HWND hwnd;
-static LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-	if (msg == WM_ON_HTTP_REQUEST) {
-		//prevent all exceptions
-		__try {
-			((MainEvent*)lp)->Invoke();
-		}
-		__except (1) {
-
-		}
-		__try {
-			delete ((MainEvent*)lp);
-		}
-		__except (1) {}
-		return 0;
-	}
-	return DefWindowProc(hwnd, msg, wp, lp);
-}
-void createMessageWindow() {
-	HINSTANCE hinst = ::GetModuleHandle(NULL);
-	if (!WindowClass) {
-		//make a window class
-		WNDCLASSEXW wcex = {
-			/*size*/sizeof(WNDCLASSEX), /*style*/0, /*proc*/WndProc, /*extra*/0L,0L, /*hinst*/hinst,
-			/*icon*/NULL, /*cursor*/NULL, /*brush*/NULL, /*menu*/NULL,
-			/*class*/L"KHttpServer Msg wnd class", /*smicon*/NULL };
-		WindowClass = ::RegisterClassExW(&wcex);
-		if (!WindowClass)
-			TVPThrowExceptionMessage(TJS_W("register window class failed."));
-	}
-	//create a window for this instance to receive messahes
-	hwnd = ::CreateWindowExW(0, (LPCWSTR)MAKELONG(WindowClass, 0), (ttstr(TJS_W("KHttpServer Msg")) + rand()).c_str(),
-		0, 0, 0, 1, 1, HWND_MESSAGE, NULL, hinst, NULL);
-	if (!hwnd) TVPThrowExceptionMessage(TJS_W("create message window failed."));
-	//::SetWindowLong(hwnd, GWL_USERDATA, (LONG)this);
-}
-
-NCB_POST_REGIST_CALLBACK(createMessageWindow);
-#endif
-
 
 //count connection macros
 #define REGISTALIVECONN RefCountMutex.lock();aliveConnCount++;RefCountMutex.unlock()
@@ -186,7 +122,7 @@ auto its = new  KResponse<T>(res);\
 /*itq->AddRef();*/\
 arg[0] =new tTJSVariant(itq,itq); \
 arg[1] =new tTJSVariant(its); \
-PostMessageW(hwnd, WM_ON_HTTP_REQUEST,NULL,(LPARAM)new MainEvent(X,2,arg,N) );\
+(new KRunnable([&]{Y->FuncCall(NULL, N, NULL, NULL,2, arg,X);}))->runTask();\
 its->Release();\
 /*itq->Release();*/\
 }
@@ -317,7 +253,7 @@ public:
 					*arg[0] = ec.value();
 					*arg[1] = CStrToTStr(ec.message());
 				}
-				PostMessageW(hwnd, WM_ON_HTTP_REQUEST, NULL, (LPARAM)new MainEvent(this, 2, arg,L"onSent")); 
+				(new KRunnable([this, &arg] {this->FuncCall(NULL, L"onSent", NULL, NULL, 2, arg, this); }))->runTask();
 #endif
 			});
 			RELEASEIF
@@ -373,7 +309,8 @@ public:
 					*arg[0] = ec.value();
 					*arg[1] = CStrToTStr(ec.message());
 				}
-				PostMessageW(hwnd, WM_ON_HTTP_REQUEST, NULL, (LPARAM)new MainEvent(this, 2, arg, L"onSent"));
+				//PostMessageW(hwnd, WM_ON_HTTP_REQUEST, NULL, (LPARAM)new MainEvent(this, 2, arg, L"onSent"));
+				(new KRunnable([this, &arg] {this->FuncCall(NULL, L"onSent", NULL, NULL, 2, arg, this); }))->runTask();
 #endif
 				});
 			//start sending
@@ -487,7 +424,7 @@ public:
 				*arg[1] = ec.value();
 				*arg[2] = CStrToTStr(ec.message());
 			}
-			PostMessageW(hwnd, WM_ON_HTTP_REQUEST, NULL, (LPARAM)new MainEvent(objthis, 3, arg, L"onSent"));
+			(new KRunnable([this,&arg] {objthis->FuncCall(NULL, L"onError", NULL, NULL, 3, arg, objthis); }))->runTask();
 #endif
 		};
 	}
@@ -503,11 +440,11 @@ public:
 			self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, "onEvent", T);
 #else
 		if (p[1]->Type() == tvtString) {
-			auto objcxt = p[2]->AsObjectClosure();
+			auto objcxt = p[2]->AsObject();
 			self->server->resource[TStrToCStr(p[1]->AsStringNoAddRef())][TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
 		}
 		else {
-			auto objcxt = p[2]->AsObjectClosure();
+			auto objcxt = p[2]->AsObject();
 			self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
 		}
 #endif
@@ -521,7 +458,7 @@ public:
 		objcxt->PropSet(TJS_MEMBERENSURE,L"onEvent",NULL, p[1], objcxt);
 		self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt,"onEvent", T);
 #else
-		auto objcxt = p[1]->AsObjectClosure();
+		auto objcxt = p[1]->AsObject();
 		self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
 #endif
 		return TJS_S_OK;
