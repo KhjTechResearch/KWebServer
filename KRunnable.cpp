@@ -39,7 +39,7 @@ void createMessageWindow() {
 	if (!hwnd) throw "create message window failed.";
 }
 
-KRunnable::KRunnable(Trun func) :run(func) {}
+KRunnable::KRunnable(Runnable func) :run(func) {}
 
 void KRunnable::runTask()
 {

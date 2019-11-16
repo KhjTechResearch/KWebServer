@@ -6,9 +6,9 @@ class KRunnable
 {
 public:
 	bool is_timer = false;
-	typedef std::function<void()> Trun;
-	Trun run;
-	KRunnable(Trun func);
+	typedef std::function<void()> Runnable;
+	Runnable run;
+	KRunnable(Runnable func);
 	void runTask();
 	void runTaskLater(long time);
 	void runTaskAsync();
