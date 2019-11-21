@@ -191,7 +191,7 @@ public:
 		)
 	{
 		if (!membername) {
-			if (wcscmp(classname, L"Class") || wcscmp(classname, getClass()))
+			if (!wcscmp(classname, L"Class") || !wcscmp(classname, getClass()))
 				return TJS_S_TRUE;
 		}
 		else
