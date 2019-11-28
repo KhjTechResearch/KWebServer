@@ -94,7 +94,7 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 }
 
 //define the call lambda
-#define RequestEnvelop(X,N,T) RequestEnvelopDiffer(X,X,N,T)
+#define RequestEnvelop(X,N,T) RequestEnvelopDiffer(NULL,X,N,T)
 //event call lambda macro
 #ifdef USE_TVP_EVENT
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
@@ -122,7 +122,7 @@ auto its = new  KResponse<T>(res);\
 /*itq->AddRef();*/\
 arg[0] =new tTJSVariant(itq,itq); \
 arg[1] =new tTJSVariant(its); \
-(new KRunnable([&]{Y->FuncCall(NULL, N, NULL, NULL,2, arg,X);}))->runTask();\
+(new KRunnable([&]{Y.FuncCall(NULL, N, NULL, NULL,2, arg,X);delete arg[0];delete arg[1];delete[] arg;}))->runTask();\
 its->Release();\
 /*itq->Release();*/\
 }
@@ -400,8 +400,11 @@ public:
 		//server->config.timeout_content = 5000;
 #ifndef USE_TVP_EVENT
 		createMessageWindow();
-#endif
+		tTJSVariantClosure vc(objthis, objthis);
+		server->default_callback = RequestEnvelop(vc, L"onRequest", T);
+#else
 		server->default_callback = RequestEnvelop(objthis, L"onRequest", T);
+#endif
 		server->on_error = [this](shared_ptr<ST::Request> request,const SimpleWeb::error_code& ec) {
 #ifdef USE_TVP_EVENT
 			std::lock_guard<mutex> mtx(globalParseMutex);
@@ -440,11 +443,11 @@ public:
 			self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, "onEvent", T);
 #else
 		if (p[1]->Type() == tvtString) {
-			auto objcxt = p[2]->AsObject();
+			auto objcxt = p[2]->AsObjectClosure();
 			self->server->resource[TStrToCStr(p[1]->AsStringNoAddRef())][TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
 		}
 		else {
-			auto objcxt = p[2]->AsObject();
+			auto objcxt = p[2]->AsObjectClosure();
 			self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
 		}
 #endif
@@ -458,7 +461,7 @@ public:
 		objcxt->PropSet(TJS_MEMBERENSURE,L"onEvent",NULL, p[1], objcxt);
 		self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt,"onEvent", T);
 #else
-		auto objcxt = p[1]->AsObject();
+		auto objcxt = p[1]->AsObjectClosure();
 		self->server->default_resource[TStrToCStr(p[0]->AsStringNoAddRef())] = RequestEnvelop(objcxt, NULL, T);
 #endif
 		return TJS_S_OK;
