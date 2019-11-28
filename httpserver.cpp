@@ -43,7 +43,8 @@ T get##X() {\
 SC_PROPERTY_SETTER(T,X)\
 SC_PROPERTY_GETTER(T,X)
 
-
+template<class T>
+class KResponse;
 
 
 static mutex globalParseMutex;//parsing mutex,avoid errors.
@@ -74,10 +75,11 @@ iTJSDispatch2* CMapToTDict(SimpleWeb::CaseInsensitiveMultimap map) {
 }
 //function to parse requests
 template <class Y>
-iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request> request) {
+iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request >  request) {
 	iTJSDispatch2* r = TJSCreateDictionaryObject();
 	while(!r)
 		r = TJSCreateDictionaryObject();
+
 	PutToObject(L"method", CStrToTStr(request->method), r);
 	PutToObject(L"path", CStrToTStr(request->path), r);
 	PutToObject(L"query", CMapToTDict(request->parse_query_string()), r);
@@ -115,16 +117,17 @@ delete[] arg;\
 #else  
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
  {\
-std::lock_guard<mutex> mtx(globalParseMutex);\
-tTJSVariant* arg[2]; \
-auto itq = getRequestParam<T>(req); \
+std::lock_guard<mutex> mtx(globalParseMutex); \
+tTJSVariant* arg[2];\
 auto its = new  KResponse<T>(res);\
 /*itq->AddRef();*/\
-arg[0] =new tTJSVariant(itq,itq); \
-arg[1] =new tTJSVariant(its); \
-(new KRunnable([&]{Y.FuncCall(NULL, N, NULL, NULL,2, arg,X);delete arg[0];delete arg[1];delete[] arg;}))->runTask();\
+arg[1] = new tTJSVariant(its);\
+auto itq = getRequestParam<T>(req);\
+arg[0] = new tTJSVariant(itq, itq);\
+(new KRunnable([&] {Y.FuncCall(NULL,N, NULL, NULL, 2, arg, X); delete arg[0]; delete arg[1]; delete[] arg; }))->runTask();\
 its->Release();\
 /*itq->Release();*/\
+\
 }
 #endif
 
@@ -561,3 +564,4 @@ using KHttpsServer = KServer<HTTPS>;
 REGISTALL(KHttpsServer)
 using KHttpServer = KServer<HTTP>;
 REGISTALL(KHttpServer)
+NCB_POST_REGIST_CALLBACK(createMessageWindow);
