@@ -90,6 +90,7 @@ public:
 				functions.at(membername)->Release();
 			}
 			functions.insert(std::pair<std::wstring, iTJSDispatch2*>(std::wstring(membername), (param->AsObject())));
+			return TJS_S_OK;
 		}
 		else
 			if (functions.find(membername) != functions.end()) {
