@@ -48,12 +48,18 @@ std::string TStrToCStr(const ttstr& str) {
 }
 //Get T(JS) String from std C(++) String. 
 ttstr CStrToTStr(const std::string& str) {
-	tTJSString res((const tjs_nchar*)str.c_str());
-	return res;
+	try {
+		tTJSString res((const tjs_nchar*)str.c_str());
+		return res;
+	}
+	catch(...){
+		return ttstr();
+	}
 }
 //Convert T(JS) Octet to std C(++) String. 
 std::string TOctToCStr(tTJSVariantOctet* oct) {
 	return std::string((const char*)oct->GetData(), oct->GetLength());
+
 }
 //Get T(JS) Octet from std C(++) String. 
 tTJSVariantOctet* CStrToTOct(std::string s) {

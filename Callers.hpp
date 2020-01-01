@@ -222,7 +222,7 @@ public:
 		if (membername)
 			return TJS_E_MEMBERNOTFOUND;
 		else
-			if (wcscmp(classname, L"Function"))
+			if (!wcscmp(classname, L"Function"))
 				return TJS_S_TRUE;
 		return TJS_S_FALSE;
 	}

@@ -13,6 +13,7 @@ class NativeObject : public tTJSDispatch
 {
 public:
 	//map to store interal functions
+	typedef std::pair<std::wstring, iTJSDispatch2*> MappingPair;
 	std::map<std::wstring, iTJSDispatch2*> functions;
 	//lock to prevent multi-threading errors
 	std::mutex concurrent;
@@ -89,7 +90,7 @@ public:
 			if (functions.find(membername) != functions.end()) {
 				functions.at(membername)->Release();
 			}
-			functions.insert(std::pair<std::wstring, iTJSDispatch2*>(std::wstring(membername), (param->AsObject())));
+			functions.insert(MappingPair(std::wstring(membername), (param->AsObject())));
 			return TJS_S_OK;
 		}
 		else
@@ -103,17 +104,17 @@ public:
 		return TJS_E_MEMBERNOTFOUND;
 
 	}
-	//macro to put lambda function into this object
+	//put lambda function into this object
 	void putFunc(const std::wstring str, NativeTJSFunction func) {
 		std::lock_guard<std::mutex> lock(concurrent);
-		functions.insert(std::pair<std::wstring, iTJSDispatch2*>(str, (new FunctionCaller(func))));
+		functions.insert(MappingPair(str, (new FunctionCaller(func))));
 	}
-	//macro to put lambda properto into this object.
+	//put lambda property into this object.
 	template<typename  T> void putProp(const std::wstring str,
 		typename PropertyCaller<T>::getterT getter = NULL,
 		typename PropertyCaller<T>::setterT setter = NULL) {
 		std::lock_guard<std::mutex> lock(concurrent);
-		functions.insert(std::pair<std::wstring, iTJSDispatch2*>(str, (new PropertyCaller<T>(getter, setter))));
+		functions.insert(MappingPair(str, (new PropertyCaller<T>(getter, setter))));
 	}
 	tjs_error TJS_INTF_METHOD
 		EnumMembers(tjs_uint32 flag, tTJSVariantClosure* callback, iTJSDispatch2* objthis)
@@ -123,7 +124,7 @@ public:
 		par[0] = new tTJSVariant();
 		par[1] = new tTJSVariant(NULL);
 		par[2] = new tTJSVariant();
-		for (std::map<std::wstring, iTJSDispatch2*>::iterator it = functions.begin(); it != functions.end(); it++) {
+		for (auto it = functions.begin(); it != functions.end(); it++) {
 			*par[0] = ttstr(it->first.c_str());
 			*par[2] = tTJSVariant(&(*(it->second)));
 			callback->FuncCall(NULL, NULL, NULL, &tTJSVariant(), 3, par, objthis);
