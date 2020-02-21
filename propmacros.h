@@ -18,7 +18,7 @@
 #define FUNCTION(a) RawCallback(#a, &Class::##a, 0)
 template<class T>
  T *alloc(int count=1) {
-	return (T*)malloc(sizeof(T)*count);
+	return new T[count];
 }
 //put object to object
 void PutToObject(const wchar_t* name, iTJSDispatch2* data, iTJSDispatch2* inst) {

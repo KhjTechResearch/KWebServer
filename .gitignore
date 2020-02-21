@@ -360,3 +360,4 @@ healthchecksdb
 /Release/httpserv_WinEvent.exp
 /Release/httpserv_WinEvent.lib
 /Release_WinEvent
+/Release_TVPEvent/httpserv.vcxproj.FileListAbsolute.txt

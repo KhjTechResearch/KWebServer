@@ -78,17 +78,22 @@ iTJSDispatch2* CMapToTDict(SimpleWeb::CaseInsensitiveMultimap map) {
 template <class Y>
 iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request >  request) {
 	iTJSDispatch2* r = TJSCreateDictionaryObject();
-	PutToObject(L"method", CStrToTStr(request->method), r);
-	PutToObject(L"path", CStrToTStr(request->path), r);
-	PutToObject(L"query", CMapToTDict(request->parse_query_string()), r);
-	PutToObject(L"version", CStrToTStr(request->http_version), r);
-	PutToObject(L"headers", CMapToTDict(request->header), r);
-	std::string s;
-	s.assign(request->content.string());
-	boost::asio::ip::tcp::endpoint ep = request->remote_endpoint();
-	PutToObject(L"client", (CStrToTStr(ep.address().to_string()) + L":" + ttstr(ep.port())), r);//combine ip string
-	PutToObject(L"contentString", new PropertyCaller<ttstr>([s] {return CStrToTStr(s); }, NULL), r);//Convert only if used.
-	PutToObject(L"contentData", new PropertyCaller<tTJSVariantOctet*>([s] { return CStrToTOct(s); }, NULL), r);
+	try {
+		PutToObject(L"method", CStrToTStr(request->method), r);
+		PutToObject(L"path", CStrToTStr(request->path), r);
+		PutToObject(L"query", CMapToTDict(request->parse_query_string()), r);
+		PutToObject(L"version", CStrToTStr(request->http_version), r);
+		PutToObject(L"headers", CMapToTDict(request->header), r);
+		std::string s;
+		s.assign(request->content.string());
+		boost::asio::ip::tcp::endpoint ep = request->remote_endpoint();
+		PutToObject(L"client", (CStrToTStr(ep.address().to_string()) + L":" + ttstr(ep.port())), r);//combine ip string
+		PutToObject(L"contentString", new PropertyCaller<ttstr>([s] {return CStrToTStr(s); }, NULL), r);//Convert only if used.
+		PutToObject(L"contentData", new PropertyCaller<tTJSVariant>([s] { return CStrToTOct(s); }, NULL), r);
+	}
+	catch (...) {
+
+	}
 	return r;
 }
 
@@ -97,17 +102,20 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 //event call lambda macro
 #ifdef USE_TVP_EVENT
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<T>::Response> res, shared_ptr <SimpleWeb::Server<T>::Request> req)\
- {\
-ttstr mn(N);\
-tTJSVariant *arg=new tTJSVariant[2];\
-auto itq= getRequestParam<T>(req);\
-auto its =new  KResponse<T>(res);\
-arg[0] = tTJSVariant(itq,itq); \
-arg[1] = its; \
-TVPPostEvent(X, Y,mn,rand(),NULL, 2,arg);\
-its->Release();\
-itq->Release();\
-delete[] arg;\
+{\
+	try{\
+		ttstr mn(N);\
+		tTJSVariant *arg=new tTJSVariant[2];\
+		auto itq= getRequestParam<T>(req);\
+		auto its =new  KResponse<T>(res);\
+		arg[0] = itq; \
+		arg[1] = its; \
+		TVPPostEvent(X, Y,mn,rand(),NULL, 2,arg);\
+		its->Release();\
+		itq->Release();\
+		delete[] arg;\
+	}catch(...){\
+	}\
 }
 #else  
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<T>::Response> res, shared_ptr <SimpleWeb::Server<T>::Request> req)\
@@ -235,18 +243,22 @@ public:
 			return TJS_S_OK;
 			});
 		putFunc(L"send", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
-
+			this->AddRef();
 			//send with callback
 			response->send([this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-				std::lock_guard<mutex> mtx(globalParseMutex);
+				//std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
 				static ttstr evn(L"onSent");
-				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				try {
+					if (TJSIsObjectValid(this->IsValid(NULL,NULL,NULL,this)))
+						TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				}
+				catch (...) {}
 				delete[] tv;
 #else
 				tTJSVariant* arg[2]; 
@@ -294,15 +306,18 @@ public:
 			
 			FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-				std::lock_guard<mutex> mtx(globalParseMutex);
+				//std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
-				
 				if (ec) {
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
 				static ttstr evn(L"onSent");
-				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				try {
+					if (TJSIsObjectValid(this->IsValid(NULL, NULL, NULL, this)))
+						TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				}
+				catch (...) {}
 				this->Release();
 				delete[] tv;
 #else

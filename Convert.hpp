@@ -62,8 +62,8 @@ std::string TOctToCStr(tTJSVariantOctet* oct) {
 
 }
 //Get T(JS) Octet from std C(++) String. 
-tTJSVariantOctet* CStrToTOct(std::string s) {
-	return new tTJSVariantOctet((unsigned char*)s.c_str(), s.size());
+tTJSVariant CStrToTOct(std::string s) {
+	return tTJSVariant((unsigned char*)s.c_str(), s.size());
 }
 //Iterate Object members and call function.
 void IterateObject(iTJSDispatch2* obj,std::function<void(tTJSVariant*, tTJSVariant*)>func) {

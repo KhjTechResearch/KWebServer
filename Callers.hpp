@@ -38,8 +38,10 @@ public:
 	{
 		if (membername)
 			return TJS_E_MEMBERNOTFOUND;
-		if (getter)
-			*result = tTJSVariant(getter());
+		if (getter) {
+			if (result)
+				*result = tTJSVariant(getter());
+		}
 		else
 			return TJS_E_ACCESSDENYED;
 		return TJS_S_OK;
@@ -54,7 +56,8 @@ public:
 	{
 		if (membername)
 			return TJS_E_MEMBERNOTFOUND;
-
+		if (param == NULL)
+			return TJS_S_OK;
 		if (setter)
 			setter(T(*param));
 		else
@@ -73,7 +76,7 @@ public:
 		if (membername)
 			return TJS_E_MEMBERNOTFOUND;
 		else
-			if (wcscmp(classname, L"Property"))
+			if (!wcscmp(classname, L"Property"))
 				return TJS_S_TRUE;
 		return TJS_S_FALSE;
 	}
@@ -113,6 +116,25 @@ tjs_error TJS_INTF_METHOD PropertyCaller<tTJSVariantOctet*> ::PropGet(
 		auto get = getter();
 		*result = tTJSVariant(get);
 		get->Release();
+	}
+	else
+		return TJS_E_ACCESSDENYED;
+	return TJS_S_OK;
+}
+template <>
+tjs_error TJS_INTF_METHOD PropertyCaller<tTJSVariant> ::PropGet(
+	tjs_uint32 flag,
+	const tjs_char* membername,
+	tjs_uint32* hint,
+	tTJSVariant* result,
+	iTJSDispatch2* objthis
+)
+{
+	if (membername)
+		return TJS_E_MEMBERNOTFOUND;
+	if (getter) {
+		auto get = getter();
+		*result = get;
 	}
 	else
 		return TJS_E_ACCESSDENYED;
