@@ -104,12 +104,13 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<T>::Response> res, shared_ptr <SimpleWeb::Server<T>::Request> req)\
 {\
 	try{\
+		/*std::lock_guard<mutex> mtx(globalParseMutex);*/\
 		ttstr mn(N);\
 		tTJSVariant *arg=new tTJSVariant[2];\
 		auto itq= getRequestParam<T>(req);\
 		auto its =new  KResponse<T>(res);\
-		arg[0] = itq; \
-		arg[1] = its; \
+		arg[0] =tTJSVariant(itq); \
+		arg[1] =tTJSVariant(its); \
 		TVPPostEvent(X, Y,mn,rand(),NULL, 2,arg);\
 		its->Release();\
 		itq->Release();\
@@ -253,12 +254,12 @@ public:
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
-				static ttstr evn(L"onSent");
+				/*static ttstr evn(L"onSent");
 				try {
 					if (TJSIsObjectValid(this->IsValid(NULL,NULL,NULL,this)))
 						TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				}
-				catch (...) {}
+				catch (...) {}*/
 				delete[] tv;
 #else
 				tTJSVariant* arg[2]; 
@@ -312,12 +313,12 @@ public:
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
-				static ttstr evn(L"onSent");
+				/*static ttstr evn(L"onSent");
 				try {
 					if (TJSIsObjectValid(this->IsValid(NULL, NULL, NULL, this)))
 						TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				}
-				catch (...) {}
+				catch (...) {}*/
 				this->Release();
 				delete[] tv;
 #else
