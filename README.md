@@ -12,7 +12,8 @@ Used headers from [SimpleWeb](https://github.com/eidheim/Simple-Web-Server) repo
 documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github.io/KWebServer/)  
 使用文档：[KWebServer文档](https://khjtechresearch.github.io/KWebServer/)  
 **(Chinese version only,English version comming soon.)**  
-**English and Japanese translations wanted, if you would like to do the translations,please open a pull request and upload translated documents with a suffix such as `_ja` or `_en`.**
+**English and Japanese translations wanted, if you would like to do the translations,please open a pull request and upload translated documents with a suffix such as `_ja` or `_en`.**    
+This project is open source under ![AGPLv3](https://www.ghostscript.com/images/agplv3-88x31.png)  
 ### Building
 * Checkout project
   * You can use **Visual Studio 2019 IDE** or clone from console:
@@ -41,4 +42,3 @@ documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github
 ### 注意
 * 本插件只在 __Windows 10__ 和 __Windows server 2012 datacenter__ 上测试过，更早的版本可能不受支持。  
 * 本插件可能有一些bug，如果你不幸的遇上了，请通过issue和pull request告诉作者
-![AGPL](https://www.ghostscript.com/images/agplv3-88x31.png)
