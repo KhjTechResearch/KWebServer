@@ -41,4 +41,4 @@ documentation and wiki:[KWebServer Documentation](https://khjtechresearch.github
 ### 注意
 * 本插件只在 __Windows 10__ 和 __Windows server 2012 datacenter__ 上测试过，更早的版本可能不受支持。  
 * 本插件可能有一些bug，如果你不幸的遇上了，请通过issue和pull request告诉作者
-
+![AGPL](https://www.ghostscript.com/images/agplv3-88x31.png)
