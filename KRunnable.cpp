@@ -8,7 +8,7 @@ static LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 		//prevent all exceptions.
 		KRunnable* kr = ((KRunnable*)lp);
 		__try {
-				kr->Run();
+			kr->run();
 		}
 		__except (1) {
 
@@ -31,7 +31,7 @@ void createMessageWindow() {
 		WNDCLASSEXW wcex = {
 			/*size*/sizeof(WNDCLASSEX), /*style*/0, /*proc*/WndProc, /*extra*/0L,0L, /*hinst*/hinst,
 			/*icon*/NULL, /*cursor*/NULL, /*brush*/NULL, /*menu*/NULL,
-			/*class*/L"Msg wnd class", /*smicon*/NULL };
+			/*class*/L"KHttpServer Msg wnd class", /*smicon*/NULL };
 		
 		while (!WindowClass)
 			WindowClass = ::RegisterClassExW(&wcex);
@@ -42,22 +42,14 @@ void createMessageWindow() {
 		0, 0, 0, 1, 1, HWND_MESSAGE, NULL, hinst, NULL);
 }
 
-
-
 KRunnable::KRunnable(Runnable func) :run(func),future(NULL) {}
 
-KRunnable::KRunnable(Runnable func, KFuture* future) : run(func), future(future)
+KRunnable::KRunnable(Runnable func, KFuture* future)
 {
+	KRunnable::KRunnable(func);
+	this->future = future;
 }
-void KRunnable::Run()
-{
-	try {
-		run();
-	}
-	catch (...) {
 
-	}
-}
 KRunnable* KRunnable::runTask()
 {
 	if (!is_running) {
@@ -75,20 +67,12 @@ KRunnable* KRunnable::runTaskLater(long time)
 	if (!is_running) {
 		Start();
 		std::thread th([this, time] {
-			try {
-				std::this_thread::sleep_for(std::chrono::milliseconds(time));
-				runTask();
-				End();
-				if (!is_timer)
-					delete this;
-			}
-			catch (...) {
-				End();
-				if (!is_timer)
-					delete this;
-			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(time));
+			runTask();
+			End();
+			if (!is_timer)
+				delete this;
 			});
-
 		th.detach();
 	}
 	return this;
@@ -195,10 +179,7 @@ KFuture* KRunnable::getFuture() {
 KFuture::KFuture()
 {
 }
-KFuture::~KFuture()
-{
-	waitlock.unlock();
-}
+
 void KFuture::start()
 {
 	waitlock.lock();

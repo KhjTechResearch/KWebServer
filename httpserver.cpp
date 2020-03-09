@@ -26,7 +26,6 @@
 #include <math.h>
 #include "IStreamStdWrapper.h"
 #include "KRunnable.h"
-//#include <taskschd.h>
 using namespace std;
 //alias define
 using HttpsServer = SimpleWeb::Server<SimpleWeb::HTTPS>;
@@ -54,8 +53,8 @@ static int aliveConnCount;//counts alive conections
 extern tjs_int TVPPluginGlobalRefCount;
 
 //count connection macros
-//#define REGISTALIVECONN RefCountMutex.lock();aliveConnCount++;RefCountMutex.unlock()
-//#define UNREGISTALIVECONN RefCountMutex.lock();aliveConnCount--;RefCountMutex.unlock()
+#define REGISTALIVECONN RefCountMutex.lock();aliveConnCount++;RefCountMutex.unlock()
+#define UNREGISTALIVECONN RefCountMutex.lock();aliveConnCount--;RefCountMutex.unlock()
 
 
 //Convert T(JS) Dictionary to std C(++) Multimap.
@@ -69,7 +68,7 @@ SimpleWeb::CaseInsensitiveMultimap TDictToCMap(iTJSDispatch2* obj) {
 //Get T(JS) Dictionary from std C(++) Multimap.
 iTJSDispatch2* CMapToTDict(SimpleWeb::CaseInsensitiveMultimap map) {
 	iTJSDispatch2* obj = TJSCreateDictionaryObject();
-	for (auto it = map.begin(); it != map.end(); it++) {
+	for (SimpleWeb::CaseInsensitiveMultimap::iterator it = map.begin(); it != map.end(); it++) {
 		PutToObject(CStrToTStr((*it).first).c_str(), CStrToTStr((*it).second), obj);
 	}
 	return obj;
@@ -78,22 +77,21 @@ iTJSDispatch2* CMapToTDict(SimpleWeb::CaseInsensitiveMultimap map) {
 template <class Y>
 iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request >  request) {
 	iTJSDispatch2* r = TJSCreateDictionaryObject();
-	try {
-		PutToObject(L"method", CStrToTStr(request->method), r);
-		PutToObject(L"path", CStrToTStr(request->path), r);
-		PutToObject(L"query", CMapToTDict(request->parse_query_string()), r);
-		PutToObject(L"version", CStrToTStr(request->http_version), r);
-		PutToObject(L"headers", CMapToTDict(request->header), r);
-		std::string s;
-		s.assign(request->content.string());
-		boost::asio::ip::tcp::endpoint ep = request->remote_endpoint();
-		PutToObject(L"client", (CStrToTStr(ep.address().to_string()) + L":" + ttstr(ep.port())), r);//combine ip string
-		PutToObject(L"contentString", new PropertyCaller<ttstr>([s] {return CStrToTStr(s); }, NULL), r);//Convert only if used.
-		PutToObject(L"contentData", new PropertyCaller<tTJSVariant>([s] { return CStrToTOct(s); }, NULL), r);
-	}
-	catch (...) {
+	while(!r)
+		r = TJSCreateDictionaryObject();
 
-	}
+	PutToObject(L"method", CStrToTStr(request->method), r);
+	PutToObject(L"path", CStrToTStr(request->path), r);
+	PutToObject(L"query", CMapToTDict(request->parse_query_string()), r);
+	PutToObject(L"version", CStrToTStr(request->http_version), r);
+	PutToObject(L"headers", CMapToTDict(request->header), r);
+	std::string s;
+	s.assign(request->content.string());
+	//pprintf(L"method", CStrToTStr(request->method), r);
+	boost::asio::ip::tcp::endpoint ep = request->remote_endpoint();
+	PutToObject(L"client", (CStrToTStr(ep.address().to_string()) + L":" + ttstr(ep.port())), r);//cpmbine ip string
+	PutToObject(L"contentString", new PropertyCaller<ttstr>([s] {return CStrToTStr(s); }, NULL), r);//Convert only if used.
+	PutToObject(L"contentData", new PropertyCaller<tTJSVariantOctet*>([s] { return CStrToTOct(s); }, NULL), r);
 	return r;
 }
 
@@ -101,34 +99,35 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 #define RequestEnvelop(X,N,T) RequestEnvelopDiffer(NULL,X,N,T)
 //event call lambda macro
 #ifdef USE_TVP_EVENT
-#define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<T>::Response> res, shared_ptr <SimpleWeb::Server<T>::Request> req)\
-{\
-	try{\
-		/*std::lock_guard<mutex> mtx(globalParseMutex);*/\
-		ttstr mn(N);\
-		tTJSVariant *arg=new tTJSVariant[2];\
-		auto itq= getRequestParam<T>(req);\
-		auto its =new  KResponse<T>(res);\
-		arg[0] =tTJSVariant(itq); \
-		arg[1] =tTJSVariant(its); \
-		TVPPostEvent(X, Y,mn,rand(),NULL, 2,arg);\
-		its->Release();\
-		itq->Release();\
-		delete[] arg;\
-	}catch(...){\
-	}\
+#define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
+ {\
+std::lock_guard<mutex> mtx(globalParseMutex);\
+ttstr mn(N);\
+tTJSVariant *arg=new tTJSVariant[2];\
+auto itq= getRequestParam<T>(req);\
+auto its =new  KResponse<T>(res);\
+arg[0] = tTJSVariant(itq,itq); \
+arg[1] = its; \
+/*Y->FuncCall(NULL,NULL,NULL,NULL,2,&arg,X);*/\
+TVPPostEvent(X, Y,mn,rand(),/*NULL*/TVP_EPT_EXCLUSIVE, 2,arg);\
+its->Release();\
+itq->Release();\
+delete[] arg;\
 }
 #else  
-#define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<T>::Response> res, shared_ptr <SimpleWeb::Server<T>::Request> req)\
+#define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
  {\
-tTJSVariant** arg;\
-arg=alloc<tTJSVariant*>(2);\
+std::lock_guard<mutex> mtx(globalParseMutex); \
+tTJSVariant* arg[2];\
 auto its = new  KResponse<T>(res);\
+/*itq->AddRef();*/\
 arg[1] = new tTJSVariant(its);\
 auto itq = getRequestParam<T>(req);\
 arg[0] = new tTJSVariant(itq, itq);\
-(new KRunnable([=] {Y.FuncCall(NULL,N, NULL, NULL, 2, arg, X); delete arg[0]; delete arg[1]; delete[] arg; }))->runTask();\
+(new KRunnable([&] {Y.FuncCall(NULL,N, NULL, NULL, 2, arg, X); delete arg[0]; delete arg[1]; delete[] arg; }))->runTask();\
 its->Release();\
+/*itq->Release();*/\
+\
 }
 #endif
 
@@ -147,23 +146,16 @@ public:
 		ifs->read(&x, 1);//read a bit to know if it is valid
 		ifs->seekg(0);
 		buffer = new char[packetsize];
-		
 		//consider this as an alive connection
-		//REGISTALIVECONN;
+		REGISTALIVECONN;
 		
-	}
-	void CallBack(SimpleWeb::error_code ec) {
-		try {
-			callback(ec);
-		}
-		catch(...){}
 	}
 	~FileSender() {
 		ifs->close();
-		CallBack(SimpleWeb::error_code());
+		callback(SimpleWeb::error_code());
 		delete[] buffer;
 		//remove this from alive connections
-		//UNREGISTALIVECONN;
+		UNREGISTALIVECONN;
 	}
 	//start sending
 	void send() {
@@ -179,7 +171,7 @@ public:
 						else
 							delete this;//if send complete
 					else
-						CallBack(ec);
+						callback(ec);
 					});
 			}
 		}
@@ -197,9 +189,8 @@ public:
 	std::function<void(tTJSVariant*, tTJSVariant*)>func;
 	shared_ptr<typename T::Response> response;
 	KResponse(shared_ptr<typename T::Response> res) :response(res) {
-		
 		//consider this as an alive connection
-		//REGISTALIVECONN;
+		REGISTALIVECONN;
 		putFunc(L"write", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
 			if (n < 1)
 				response->write();//default write with 200 and empty response
@@ -244,22 +235,18 @@ public:
 			return TJS_S_OK;
 			});
 		putFunc(L"send", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
-			this->AddRef();
+
 			//send with callback
 			response->send([this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-				//std::lock_guard<mutex> mtx(globalParseMutex);
+				std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
-				/*static ttstr evn(L"onSent");
-				try {
-					if (TJSIsObjectValid(this->IsValid(NULL,NULL,NULL,this)))
-						TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
-				}
-				catch (...) {}*/
+				static ttstr evn(L"onSent");
+				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				delete[] tv;
 #else
 				tTJSVariant* arg[2]; 
@@ -300,25 +287,21 @@ public:
 				auto headers = TDictToCMap(p[2]->AsObjectNoAddRef());
 				ifs->seekg(0, ios::end);
 				headers.emplace(std::pair<std::string,std::string>("Content-Length", std::to_string(ifs->tellg())));//set to content length
-			
+			//	TVPAddLog(std::to_string(ifs->tellg()).c_str());
 				ifs->seekg(0,ios::beg);
 				response->write((SimpleWeb::StatusCode)p[1]->AsInteger(),headers);//write headers if provided
 			}
-			
+			//instance filesender with callback and stream
 			FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-				//std::lock_guard<mutex> mtx(globalParseMutex);
+				std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
-				/*static ttstr evn(L"onSent");
-				try {
-					if (TJSIsObjectValid(this->IsValid(NULL, NULL, NULL, this)))
-						TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
-				}
-				catch (...) {}*/
+				static ttstr evn(L"onSent");
+				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				this->Release();
 				delete[] tv;
 #else
@@ -330,7 +313,7 @@ public:
 					*arg[1] = CStrToTStr(ec.message());
 				}
 				//PostMessageW(hwnd, WM_ON_HTTP_REQUEST, NULL, (LPARAM)new MainEvent(this, 2, arg, L"onSent"));
-				(new KRunnable([this, &arg] { this->FuncCall(NULL, L"onSent", NULL, NULL, 2, arg, this); }))->runTask();
+				(new KRunnable([this, &arg] {this->FuncCall(NULL, L"onSent", NULL, NULL, 2, arg, this); }))->runTask();
 #endif
 				});
 			//start sending
@@ -379,7 +362,7 @@ public:
 	}
 	virtual ~KResponse() {
 		//remove this from alive connections
-		//UNREGISTALIVECONN;
+		UNREGISTALIVECONN;
 	}
 
 };
@@ -425,7 +408,7 @@ public:
 #else
 		server->default_callback = RequestEnvelop(objthis, L"onRequest", T);
 #endif
-		/*server->on_error = [this](shared_ptr<ST::Request> request,const SimpleWeb::error_code& ec) {
+		server->on_error = [this](shared_ptr<ST::Request> request,const SimpleWeb::error_code& ec) {
 #ifdef USE_TVP_EVENT
 			std::lock_guard<mutex> mtx(globalParseMutex);
 			ttstr erc(L"onError");
@@ -438,33 +421,18 @@ public:
 			TVPPostEvent(objthis, objthis, erc, NULL, NULL, 3, tv);
 			delete[] tv;
 #else
-			
 			tTJSVariant* arg[3];
-			auto itq = getRequestParam<T>(request);
-			tTJSVariant* r0 =new tTJSVariant(itq,itq);
-			tTJSVariant* r1=0;
-			tTJSVariant* r2=0;
-			try {
-				if (ec) {
-					r1 = new tTJSVariant(ec.value());
-					r2 = new tTJSVariant(CStrToTStr(ec.message()));
-				}
-				arg[0] = r0;
-				arg[1] = r1;
-				arg[2] = r2;
-				(new KRunnable([this, &arg] {objthis->FuncCall(NULL, L"onError", NULL, NULL, 3, arg, objthis); }))->runTask();
+			arg[0] = new tTJSVariant();
+			arg[1] = new tTJSVariant();
+			arg[2] = new tTJSVariant();
+			*arg[0]= getRequestParam<T>(request);
+			if (ec) {
+				*arg[1] = ec.value();
+				*arg[2] = CStrToTStr(ec.message());
 			}
-			catch (...) {
-				if (r0)
-					delete r0;
-				if (r1)
-					delete r1;
-				if (r2)
-					delete r2;
-			}
-
+			(new KRunnable([this,&arg] {objthis->FuncCall(NULL, L"onError", NULL, NULL, 3, arg, objthis); }))->runTask();
 #endif
-		};*/
+		};
 	}
 	static tjs_error TJS_INTF_METHOD setSpecificCallBack(tTJSVariant* r, tjs_int n, tTJSVariant** p, KServer* self) {
 		if (!self) return TJS_E_NATIVECLASSCRASH;
@@ -517,11 +485,11 @@ public:
 	}
 	static tjs_error TJS_INTF_METHOD startAsync(tTJSVariant* r, tjs_int n, tTJSVariant** p, KServer* self) {
 		if (!self) return TJS_E_NATIVECLASSCRASH;
-		thread servert([self]{
+		thread server_thread([self]() {
 			// Start server4
 			self->server->start();
 			});
-		servert.detach();
+		server_thread.detach();
 		return TJS_S_OK;
 	}
 };
@@ -596,4 +564,4 @@ using KHttpsServer = KServer<HTTPS>;
 REGISTALL(KHttpsServer)
 using KHttpServer = KServer<HTTP>;
 REGISTALL(KHttpServer)
-//NCB_POST_REGIST_CALLBACK(createMessageWindow);
+NCB_POST_REGIST_CALLBACK(createMessageWindow);

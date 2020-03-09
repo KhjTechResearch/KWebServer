@@ -10,7 +10,6 @@ class KFuture {
 	std::timed_mutex waitlock;
 public:
 	KFuture();
-	virtual ~KFuture();
 	virtual void start();
 	virtual void complete();
 	virtual bool wait(long time);
@@ -39,7 +38,6 @@ public:
 	Runnable run;
 	KRunnable(Runnable func);
 	KRunnable(Runnable func,KFuture * future);
-	void Run();
 	KRunnable* runTask();
 	KRunnable* runTaskLater(long time);
 	KRunnable* runTaskAsync();
