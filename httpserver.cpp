@@ -77,9 +77,7 @@ iTJSDispatch2* CMapToTDict(SimpleWeb::CaseInsensitiveMultimap map) {
 template <class Y>
 iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request >  request) {
 	iTJSDispatch2* r = TJSCreateDictionaryObject();
-	while(!r)
-		r = TJSCreateDictionaryObject();
-
+	r = TJSCreateDictionaryObject();
 	PutToObject(L"method", CStrToTStr(request->method), r);
 	PutToObject(L"path", CStrToTStr(request->path), r);
 	PutToObject(L"query", CMapToTDict(request->parse_query_string()), r);
@@ -91,7 +89,7 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 	boost::asio::ip::tcp::endpoint ep = request->remote_endpoint();
 	PutToObject(L"client", (CStrToTStr(ep.address().to_string()) + L":" + ttstr(ep.port())), r);//cpmbine ip string
 	PutToObject(L"contentString", new PropertyCaller<ttstr>([s] {return CStrToTStr(s); }, NULL), r);//Convert only if used.
-	PutToObject(L"contentData", new PropertyCaller<tTJSVariantOctet*>([s] { return CStrToTOct(s); }, NULL), r);
+	PutToObject(L"contentData", new PropertyCaller<tTJSVariant>([s] { return CStrToTOct(s); }, NULL), r);
 	return r;
 }
 
@@ -132,7 +130,7 @@ its->Release();\
 #endif
 
 //file sender,default 128k per packet.
-template<typename T,int packetsize= 1024*128>
+template<typename T,int packetsize= 1024*1024>
 class FileSender {
 public:
 	shared_ptr<typename T::Response> response;
@@ -144,9 +142,8 @@ public:
 		//Allocate buffer
 		char x;
 		ifs->read(&x, 1);//read a bit to know if it is valid
-		ifs->seekg(0);
-		buffer = new char[packetsize];
-		//consider this as an alive connection
+		ifs->seekg(0);//return to start
+		buffer = new char[packetsize];//allocate buffer
 		REGISTALIVECONN;
 		
 	}
@@ -246,7 +243,7 @@ public:
 					tv[1] = CStrToTStr(ec.message());
 				}
 				static ttstr evn(L"onSent");
-				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				//TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				delete[] tv;
 #else
 				tTJSVariant* arg[2]; 
@@ -301,7 +298,7 @@ public:
 					tv[1] = CStrToTStr(ec.message());
 				}
 				static ttstr evn(L"onSent");
-				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				//TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				this->Release();
 				delete[] tv;
 #else

@@ -11,14 +11,14 @@
 #include <windows.h>
 //from char to wchar
 //deprecated
-wchar_t* AnsiToUnicode(const char* szStr) {
-	int nLen = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, szStr, -1, NULL, 0);
-	if (nLen == 0)
+wchar_t* AnsiToUnicode(const char* szStr,int& size) {
+	size = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, szStr, -1, NULL, 0);
+	if (size == 0)
 	{
 		return NULL;
 	}
-	wchar_t* pResult = new wchar_t[nLen + 1];
-	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, szStr, -1, pResult, nLen);
+	wchar_t* pResult = new wchar_t[size + 1];
+	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, szStr, -1, pResult, size);
 	return pResult;
 }
 

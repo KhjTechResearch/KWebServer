@@ -1,7 +1,7 @@
 #pragma once
 //from char to wchar
 //deprecated
-wchar_t* AnsiToUnicode(const char* szStr);
+wchar_t* AnsiToUnicode(const char* szStr,int&size);
 /*
 from wchar(TJS_W) to char
 */
