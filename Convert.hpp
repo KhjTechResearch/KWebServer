@@ -52,6 +52,7 @@ ttstr CStrToTStr(const std::string& str) {
 		int siz;
 		auto au=AnsiToUnicode(str.c_str(),siz);
 		tTJSString res(au,siz);
+		delete[] au;
 		return res;
 	}
 	catch (...) {

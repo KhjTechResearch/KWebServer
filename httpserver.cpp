@@ -77,7 +77,6 @@ iTJSDispatch2* CMapToTDict(SimpleWeb::CaseInsensitiveMultimap map) {
 template <class Y>
 iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request >  request) {
 	iTJSDispatch2* r = TJSCreateDictionaryObject();
-	r = TJSCreateDictionaryObject();
 	PutToObject(L"method", CStrToTStr(request->method), r);
 	PutToObject(L"path", CStrToTStr(request->path), r);
 	PutToObject(L"query", CMapToTDict(request->parse_query_string()), r);
@@ -107,7 +106,7 @@ auto its =new  KResponse<T>(res);\
 arg[0] = tTJSVariant(itq,itq); \
 arg[1] = its; \
 /*Y->FuncCall(NULL,NULL,NULL,NULL,2,&arg,X);*/\
-TVPPostEvent(X, Y,mn,rand(),/*NULL*/TVP_EPT_EXCLUSIVE, 2,arg);\
+TVPPostEvent(X, Y,mn,rand(),/*NULL*/NULL, 2,arg);\
 its->Release();\
 itq->Release();\
 delete[] arg;\
@@ -236,7 +235,7 @@ public:
 			//send with callback
 			response->send([this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-				std::lock_guard<mutex> mtx(globalParseMutex);
+				/*std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
@@ -244,7 +243,7 @@ public:
 				}
 				static ttstr evn(L"onSent");
 				//TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
-				delete[] tv;
+				delete[] tv;*/
 #else
 				tTJSVariant* arg[2]; 
 				arg[0] = new tTJSVariant(); 
@@ -291,7 +290,7 @@ public:
 			//instance filesender with callback and stream
 			FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-				std::lock_guard<mutex> mtx(globalParseMutex);
+				/*std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
@@ -300,7 +299,7 @@ public:
 				static ttstr evn(L"onSent");
 				//TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
 				this->Release();
-				delete[] tv;
+				delete[] tv;*/
 #else
 				tTJSVariant* arg[2];
 				arg[0] = new tTJSVariant();
@@ -407,7 +406,7 @@ public:
 #endif
 		server->on_error = [this](shared_ptr<ST::Request> request,const SimpleWeb::error_code& ec) {
 #ifdef USE_TVP_EVENT
-			std::lock_guard<mutex> mtx(globalParseMutex);
+			/*std::lock_guard<mutex> mtx(globalParseMutex);
 			ttstr erc(L"onError");
 			tTJSVariant* tv = new tTJSVariant[3];
 			tv[0] = getRequestParam<T>(request);
@@ -416,7 +415,7 @@ public:
 				tv[2] = CStrToTStr(ec.message());
 			}
 			TVPPostEvent(objthis, objthis, erc, NULL, NULL, 3, tv);
-			delete[] tv;
+			delete[] tv;*/
 #else
 			tTJSVariant* arg[3];
 			arg[0] = new tTJSVariant();
