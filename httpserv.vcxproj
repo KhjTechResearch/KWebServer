@@ -338,6 +338,12 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="IStreamStdWrapper.h" />
     <ClInclude Include="KRunnable.h" />
+    <ClInclude Include="MapWrapper.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_TVPEvent|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_WinEvent|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+    </ClInclude>
     <ClInclude Include="NativeObject.hpp" />
     <ClInclude Include="ncbind.hpp" />
     <ClInclude Include="ncb_invoke.hpp" />
