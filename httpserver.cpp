@@ -99,7 +99,6 @@ iTJSDispatch2* getRequestParam(shared_ptr<typename SimpleWeb::Server<Y>::Request
 #ifdef USE_TVP_EVENT
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
  {\
-try{\
 std::lock_guard<mutex> mtx(globalParseMutex);\
 ttstr mn(N);\
 tTJSVariant *arg=new tTJSVariant[2];\
@@ -112,9 +111,6 @@ TVPPostEvent(X, Y,mn,rand(),/*NULL*/TVP_EPT_EXCLUSIVE, 2,arg);\
 its->Release();\
 itq->Release();\
 delete[] arg;\
-}catch(...){\
-;\
-}\
 }
 #else  
 #define RequestEnvelopDiffer(X,Y,N,T) [=](shared_ptr <SimpleWeb::Server<##T>::Response> res, shared_ptr <SimpleWeb::Server<##T>::Request> req)\
@@ -145,6 +141,7 @@ public:
 		:response(response),ifs(ifs),callback(callback) {
 		//Allocate buffer
 		char x;
+		ifs->read(&x, 1);//read a bit to know if it is valid
 		ifs->seekg(0);//return to start
 		buffer = new char[packetsize];//allocate buffer
 		REGISTALIVECONN;
@@ -176,10 +173,7 @@ public:
 			}
 		}
 		catch (...) {
-			try {
-				send();
-			}
-			catch (...) {}
+			send();
 		}
 	}
 };
@@ -242,15 +236,15 @@ public:
 			//send with callback
 			response->send([this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-				/*std::lock_guard<mutex> mtx(globalParseMutex);
+				std::lock_guard<mutex> mtx(globalParseMutex);
 				tTJSVariant* tv = new tTJSVariant[2];
 				if (ec) {
 					tv[0] = ec.value();
 					tv[1] = CStrToTStr(ec.message());
 				}
 				static ttstr evn(L"onSent");
-				TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
-				delete[] tv;*/
+				//TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				delete[] tv;
 #else
 				tTJSVariant* arg[2]; 
 				arg[0] = new tTJSVariant(); 
@@ -271,60 +265,56 @@ public:
 			});
 		putFunc(L"sendFile", [this](tTJSVariant* r, tjs_int n, tTJSVariant** p) {
 			if (n < 1) return TJS_E_BADPARAMCOUNT;
-			try {
-				ttstr stor(*p[0]);
-				stor = TVPNormalizeStorageName(stor);
-				TVPGetLocalName(stor);//get local file name
-				//TVPAddLog(stor);
-				ifstream* ifs = new ifstream();
-				while (!ifs->is_open())
-					ifs->open(stor.c_str(), ios::binary, _SH_DENYWR);//open file
-				this->AddRef();
-				if (!ifs->good())
-					return TJS_E_INVALIDPARAM;
 
-				if (n == 2) {
-					response->write((SimpleWeb::StatusCode)p[1]->AsInteger());//write if status code provided
-				}
-				else if (n == 3) {
-					auto headers = TDictToCMap(p[2]->AsObjectNoAddRef());
-					ifs->seekg(0, ios::end);
-					headers.emplace(std::pair<std::string, std::string>("Content-Length", std::to_string(ifs->tellg())));//set to content length
-				//	TVPAddLog(std::to_string(ifs->tellg()).c_str());
-					ifs->seekg(0, ios::beg);
-					response->write((SimpleWeb::StatusCode)p[1]->AsInteger(), headers);//write headers if provided
-				}
-				//instance filesender with callback and stream
-				FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
+			ttstr stor(*p[0]);
+			stor = TVPNormalizeStorageName(stor);
+			TVPGetLocalName(stor);//get local file name
+			//TVPAddLog(stor);
+			ifstream* ifs = new ifstream();
+			while(!ifs->is_open())
+				ifs->open(stor.c_str(), ios::binary,_SH_DENYWR);//open file
+			this->AddRef();
+			if (!ifs->good())
+				return TJS_E_INVALIDPARAM;
+
+			if (n == 2) {
+				response->write((SimpleWeb::StatusCode)p[1]->AsInteger());//write if status code provided
+			}
+			else if (n == 3) {
+				auto headers = TDictToCMap(p[2]->AsObjectNoAddRef());
+				ifs->seekg(0, ios::end);
+				headers.emplace(std::pair<std::string,std::string>("Content-Length", std::to_string(ifs->tellg())));//set to content length
+			//	TVPAddLog(std::to_string(ifs->tellg()).c_str());
+				ifs->seekg(0,ios::beg);
+				response->write((SimpleWeb::StatusCode)p[1]->AsInteger(),headers);//write headers if provided
+			}
+			//instance filesender with callback and stream
+			FileSender<T>* fs = new FileSender<T>(response, shared_ptr <ifstream>(ifs), [&, this](SimpleWeb::error_code ec) {
 #ifdef USE_TVP_EVENT
-					/*std::lock_guard<mutex> mtx(globalParseMutex);
-					tTJSVariant* tv = new tTJSVariant[2];
-					if (ec) {
-						tv[0] = ec.value();
-						tv[1] = CStrToTStr(ec.message());
-					}
-					static ttstr evn(L"onSent");
-					//TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
-					this->Release();
-					delete[] tv;*/
+				std::lock_guard<mutex> mtx(globalParseMutex);
+				tTJSVariant* tv = new tTJSVariant[2];
+				if (ec) {
+					tv[0] = ec.value();
+					tv[1] = CStrToTStr(ec.message());
+				}
+				static ttstr evn(L"onSent");
+				//TVPPostEvent(this, this, evn, NULL, NULL, 2, tv);
+				this->Release();
+				delete[] tv;
 #else
-					tTJSVariant* arg[2];
-					arg[0] = new tTJSVariant();
-					arg[1] = new tTJSVariant();
-					if (ec) {
-						*arg[0] = ec.value();
-						*arg[1] = CStrToTStr(ec.message());
-					}
-					//PostMessageW(hwnd, WM_ON_HTTP_REQUEST, NULL, (LPARAM)new MainEvent(this, 2, arg, L"onSent"));
-					(new KRunnable([this, &arg] {this->FuncCall(NULL, L"onSent", NULL, NULL, 2, arg, this); }))->runTask();
+				tTJSVariant* arg[2];
+				arg[0] = new tTJSVariant();
+				arg[1] = new tTJSVariant();
+				if (ec) {
+					*arg[0] = ec.value();
+					*arg[1] = CStrToTStr(ec.message());
+				}
+				//PostMessageW(hwnd, WM_ON_HTTP_REQUEST, NULL, (LPARAM)new MainEvent(this, 2, arg, L"onSent"));
+				(new KRunnable([this, &arg] {this->FuncCall(NULL, L"onSent", NULL, NULL, 2, arg, this); }))->runTask();
 #endif
-					});
-				//start sending
-				fs->send();
-			}
-			catch (...) {
-				return TJS_E_FAIL;
-			}
+				});
+			//start sending
+			fs->send();
 			RELEASEIF
 			return TJS_S_OK;
 			});
